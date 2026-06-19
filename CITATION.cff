@@ -1,0 +1,54 @@
+cff-version: 1.2.0
+title: "DESI RV Variables"
+message: "If you use this code or its derived artifacts, please cite this repository and the DESI/Zenodo data sources listed below."
+type: software
+version: "0.1.0"
+date-released: "2026-06-20"
+authors:
+  - family-names: "Kudriavtsev"
+    given-names: "Maksim"
+license: MIT
+repository-code: "https://github.com/Xopoko/desi-rv-variables"
+keywords:
+  - astronomy
+  - DESI
+  - radial velocity
+  - binary stars
+  - calibration
+  - reproducible research
+references:
+  - type: article
+    title: "DESI Data Release 1: Stellar Catalogue"
+    authors:
+      - family-names: "Koposov"
+        given-names: "Sergey E."
+    doi: "10.33232/001c.155260"
+    year: 2026
+    journal: "Open Journal of Astrophysics"
+  - type: data
+    title: "DESI DR1 radial velocity correction for the backup program of the main survey"
+    authors:
+      - family-names: "Koposov"
+        given-names: "Sergey"
+    doi: "10.5281/zenodo.15469272"
+    year: 2025
+  - type: article
+    title: "Data Release 1 of the Dark Energy Spectroscopic Instrument"
+    authors:
+      - name: "DESI Collaboration"
+    doi: "10.3847/1538-3881/ae4c43"
+    year: 2026
+    journal: "The Astronomical Journal"
+    volume: 171
+    issue: 5
+    start: 285
+    url: "https://arxiv.org/abs/2503.14745"
+  - type: article
+    title: "The Joker: A custom Monte Carlo sampler for binary-star and exoplanet radial velocity data"
+    authors:
+      - family-names: "Price-Whelan"
+        given-names: "Adrian M."
+    doi: "10.3847/1538-4357/aa5e50"
+    year: 2017
+    journal: "The Astrophysical Journal"
+
