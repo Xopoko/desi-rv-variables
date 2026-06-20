@@ -3,7 +3,7 @@
 Generated from local DESI DR1 MAIN FITS files using the frozen protocol,
 `desi-rv-audit` diagnostic `PROGRAM:NIGHT` fold offsets from commit
 `6b3c116cd77cc0254c9f26fd0e98fdebdaa4807b`, and the component-aware
-`desi-rv-variables` v0.1.2 bundle builder.
+`desi-rv-variables` v0.1.3 bundle builder.
 
 This report contains aggregate counts only. It intentionally does not list or
 rank source IDs.

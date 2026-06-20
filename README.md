@@ -52,7 +52,7 @@ For a clean checkout, clone the audit repository at that tag:
 
 ```bash
 git clone --branch v0.2.1 https://github.com/Xopoko/desi-rv-audit.git
-git clone --branch v0.1.2 https://github.com/Xopoko/desi-rv-variables.git
+git clone --branch v0.1.3 https://github.com/Xopoko/desi-rv-variables.git
 ```
 
 Expected local inputs can be provided via environment variables:
@@ -64,7 +64,7 @@ export DESI_RV_STRICT_CANDIDATES=/path/to/candidate_sources_strict.csv
 ```
 
 If `DESI_RV_STRICT_CANDIDATES` is not set, `scripts/build_local_bundles.sh`
-downloads `candidate_sources_strict.csv.gz` from this repository's `v0.1.2`
+downloads `candidate_sources_strict.csv.gz` from this repository's `v0.1.3`
 release and verifies its SHA-256 checksum before building local artifacts.
 
 The DESI DR1 stellar VAC reports 10,012,925 single-epoch spectra with stellar

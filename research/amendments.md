@@ -32,3 +32,8 @@ formal preregistration.
   but substantially overlaps with inspection controls.
 - Remove DESI website disclaimer text and state that this repository is an
   independent exploratory analysis.
+
+## v0.1.3
+
+- Include the pinned clean-clone instruction in the immutable release tag.
+- Point the default strict-candidate release asset URL at `v0.1.3`.
