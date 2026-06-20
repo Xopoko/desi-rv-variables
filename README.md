@@ -47,6 +47,14 @@ Raw DESI FITS files and derived Parquet bundles are intentionally ignored by
 git. Build them locally from public DESI DR1 files and the public
 `desi-rv-audit` artifacts.
 
+The frozen offset table is the one published in `desi-rv-audit` `v0.2.1`.
+For a clean checkout, clone the audit repository at that tag:
+
+```bash
+git clone --branch v0.2.1 https://github.com/Xopoko/desi-rv-audit.git
+git clone --branch v0.1.2 https://github.com/Xopoko/desi-rv-variables.git
+```
+
 Expected local inputs can be provided via environment variables:
 
 ```bash
