@@ -2,7 +2,7 @@ cff-version: 1.2.0
 title: "DESI RV Variables"
 message: "If you use this code or its derived artifacts, please cite this repository and the DESI/Zenodo data sources listed below."
 type: software
-version: "0.1.0"
+version: "0.1.1"
 date-released: "2026-06-20"
 authors:
   - family-names: "Kudriavtsev"
@@ -51,4 +51,3 @@ references:
     doi: "10.3847/1538-4357/aa5e50"
     year: 2017
     journal: "The Astrophysical Journal"
-

@@ -1,5 +1,10 @@
 """Calibration-aware DESI DR1 radial-velocity variable selection."""
 
-__all__ = ["__version__"]
-__version__ = "0.1.0"
+from importlib.metadata import PackageNotFoundError, version
 
+__all__ = ["__version__"]
+
+try:
+    __version__ = version("desi-rv-variables")
+except PackageNotFoundError:
+    __version__ = "0.0.0+local"

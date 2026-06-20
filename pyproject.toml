@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "desi-rv-variables"
-version = "0.1.0"
+version = "0.1.1"
 description = "Calibration-aware DESI DR1 radial-velocity variable candidate selection"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -34,4 +34,3 @@ where = ["src"]
 [tool.pytest.ini_options]
 addopts = "-q"
 testpaths = ["tests"]
-

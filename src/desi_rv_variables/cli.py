@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 
-from .oof import DEFAULT_BACKUP_CORRECTION_MD5, build_bundles
+from .oof import DEFAULT_BACKUP_CORRECTION_MD5, STRICT_CANDIDATES_SHA256, build_bundles
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -18,9 +18,14 @@ def _parser() -> argparse.ArgumentParser:
     build.add_argument("--min-sn-r", type=float, default=5.0)
     build.add_argument("--n-folds", type=int, default=5)
     build.add_argument("--control-ratio", type=float, default=1.0)
+    build.add_argument("--injection-base-ratio", type=float, default=1.0)
     build.add_argument(
         "--backup-correction-md5",
         default=DEFAULT_BACKUP_CORRECTION_MD5,
+    )
+    build.add_argument(
+        "--strict-candidates-sha256",
+        default=STRICT_CANDIDATES_SHA256,
     )
     return parser
 
@@ -37,7 +42,9 @@ def main() -> None:
             min_sn_r=args.min_sn_r,
             n_folds=args.n_folds,
             control_ratio=args.control_ratio,
+            injection_base_ratio=args.injection_base_ratio,
             backup_correction_md5=args.backup_correction_md5,
+            strict_candidates_sha256=args.strict_candidates_sha256,
         )
         print(f"source_summary_oof rows: {len(result.source_summary)}")
         print(f"candidate_epoch_bundle rows: {len(result.epoch_bundle)}")
@@ -46,4 +53,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

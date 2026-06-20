@@ -1,19 +1,23 @@
 # DESI RV Variables
 
-Calibration-aware search for radial-velocity variables in DESI DR1.
+[![Tests](https://github.com/Xopoko/desi-rv-variables/actions/workflows/tests.yml/badge.svg)](https://github.com/Xopoko/desi-rv-variables/actions/workflows/tests.yml)
+
+Calibration-aware search infrastructure for DESI DR1 radial-velocity variable
+candidates.
 
 ## Frozen Question
 
 After source-disjoint correction of residual `PROGRAM:NIGHT` velocity offsets,
 which stars remain robustly inconsistent with constant radial velocity, and
-what fraction of the original strict screening candidates was attributable to
-calibration-associated residuals?
+what fraction of the original strict screening candidates changes
+classification after applying source-disjoint diagnostic corrections?
 
 This repository is a protocol-first follow-up to
 [`Xopoko/desi-rv-audit`](https://github.com/Xopoko/desi-rv-audit). The audit
 repository measures the residual night-associated structure; this repository
-uses that calibration diagnostic to build a reproducible, calibration-aware
-selection function for DESI DR1 radial-velocity variable candidates.
+uses that diagnostic to prepare reproducible inputs for a future
+injection-recovery-calibrated selection function for DESI DR1 radial-velocity
+variable candidates.
 
 ## Scope
 
@@ -22,11 +26,12 @@ candidate-selection change:
 
 - strict constant-RV screening candidates before source-disjoint
   `PROGRAM:NIGHT` correction;
-- remaining outliers after out-of-fold epoch-level correction;
+- remaining outliers in the complete single-component out-of-fold cohort;
+- mutually exclusive before/after classification transitions;
 - candidate counts as a function of S/N, program, number of epochs, baseline,
   and stellar parameters;
-- a compact epoch bundle for the strict screening candidates plus a matched
-  stable-control sample.
+- a compact epoch bundle for the strict screening candidates, cadence-matched
+  inspection controls, and an injection-recovery base population.
 
 Candidate labels generated here are screening labels, not confirmed variable
 stars. Object-level interpretation requires spectrum/model inspection and
@@ -42,12 +47,13 @@ Expected local inputs can be provided via environment variables:
 
 ```bash
 export DESI_RV_AUDIT_DATA_DIR=/path/to/desi-rv-audit/data
-export DESI_RV_AUDIT_PUBLIC_DIR=/path/to/desi-rv-audit-public
+export DESI_RV_AUDIT_ARTIFACT_DIR=/path/to/desi-rv-audit-public/reports/program_night_artifacts
+export DESI_RV_STRICT_CANDIDATES=/path/to/candidate_sources_strict.csv
 ```
 
-If these variables are not set, `scripts/build_local_bundles.sh` assumes the
-`desi-rv-audit` and `desi-rv-audit-public` checkouts are siblings of this
-repository.
+If `DESI_RV_STRICT_CANDIDATES` is not set, `scripts/build_local_bundles.sh`
+downloads `candidate_sources_strict.csv.gz` from this repository's `v0.1.1`
+release and verifies its SHA-256 checksum before building local artifacts.
 
 The DESI DR1 stellar VAC reports 10,012,925 single-epoch spectra with stellar
 parameters and radial velocities and 1,718,305 Gaia sources with more than one
@@ -69,15 +75,21 @@ Outputs:
 ```text
 artifacts/source_summary_oof.parquet
 artifacts/candidate_epoch_bundle.parquet
+artifacts/strict_candidate_transition_table.csv
 artifacts/build_manifest.json
 ```
 
 `source_summary_oof.parquet` contains source-level before/after constant-RV
-metrics for all sources with at least three good OOF-correctable epochs.
+metrics for sources with at least three good epochs, including OOF coverage,
+component counts, and primary-cohort flags.
 
 `candidate_epoch_bundle.parquet` contains all epochs for the frozen strict
-screening candidates plus a deterministic matched stable-control sample. It is
-for analysis and inspection, not for public catalog claims.
+screening candidates plus deterministic control populations. It is for analysis
+and inspection, not for public catalog claims.
+
+`strict_candidate_transition_table.csv` is the primary aggregate outcome. It
+separates complete-case reclassification from OOF coverage loss and
+cross-component exclusions.
 
 ## Method Boundary
 
@@ -88,10 +100,18 @@ The `PROGRAM:NIGHT` offsets are applied out-of-fold:
    other sources.
 3. The epoch-level corrected velocity is `VRAD_ADOPTED - OFFSET_OOF`.
 4. Candidate scoring never uses a final all-source fit.
+5. Primary source-level scoring requires all good epochs to have OOF offsets
+   from one connected component. Cross-component sources are marked
+   `CROSS_COMPONENT_UNSCORABLE`.
 
 The split is source-disjoint, not night-disjoint. This tests transfer across
 different stars observed on the same nights. It does not test extrapolation to
 unseen nights.
+
+This is an exploratory analysis developed on the public DESI DR1 MAIN sample.
+The protocol was internally frozen before ranked source-ID inspection, but it
+is not a formal preregistration. Confirmation would require a pre-specified
+analysis on an independent data slice or future release.
 
 ## References
 

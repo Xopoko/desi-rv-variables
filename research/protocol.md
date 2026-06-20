@@ -1,24 +1,47 @@
 # Protocol
 
-Status: frozen before inspecting ranked DESI source IDs in this repository.
+Status: internally frozen before inspecting ranked DESI source IDs in this
+repository. The protocol and first aggregate builder were committed together;
+this is not a formal preregistration.
 
 ## Research Question
 
 After source-disjoint correction of residual `PROGRAM:NIGHT` velocity offsets,
 which stars remain robustly inconsistent with constant radial velocity, and
-what fraction of the original strict screening candidates was attributable to
-calibration-associated residuals?
+what fraction of the original strict screening candidates changes
+classification after applying source-disjoint diagnostic corrections?
 
 ## Primary Outcome
 
-The primary outcome is the change in strict constant-RV outlier counts after
-out-of-fold `PROGRAM:NIGHT` correction:
+The primary outcome is the mutually exclusive classification transition table
+for frozen strict screening candidates after out-of-fold `PROGRAM:NIGHT`
+correction:
 
 ```text
-calibration_impact = 1 - N_after_oof / N_before_strict
+BEFORE_CLASS x OOF_CLASS
 ```
 
-The primary outcome is reported overall and by:
+The headline scalar is defined only on the complete, single-component OOF
+cohort:
+
+```text
+oof_reclassification_fraction =
+  N(BEFORE outlier, OOF not outlier)
+  / N(BEFORE outlier, complete OOF cohort)
+```
+
+Reported diagnostics also separate:
+
+```text
+coverage_attrition_fraction
+before_rule_reconciliation_fraction
+new_oof_outlier_fraction
+```
+
+This avoids attributing unscorable sources or rule-reconciliation differences
+to a calibration effect.
+
+The primary outcome is reported overall and, where sample sizes support it, by:
 
 - dominant DESI program;
 - number of good epochs;
@@ -55,6 +78,19 @@ VRAD_CORRECTED_OOF = VRAD_ADOPTED - PROGRAM_NIGHT_OFFSET_OOF
 
 If no fold offset exists for the label, the epoch is marked as not
 OOF-correctable and excluded from primary source-level scoring.
+
+The audit offset table also contains a connected-component identifier. Offset
+differences are mathematically defined only within a train component. Therefore
+primary scoring requires:
+
+```text
+N_OOF_COMPONENTS == 1
+OOF_EPOCH_COVERAGE_FRACTION == 1.0
+```
+
+Sources with multiple OOF components are labelled
+`CROSS_COMPONENT_UNSCORABLE`. Sources with partial OOF coverage are reported as
+secondary coverage cases, not primary before/after evidence.
 
 The epoch uncertainty used for the first pass is the audit adopted uncertainty:
 
@@ -103,7 +139,8 @@ A source is a first-pass OOF constant-RV outlier if:
 - `p_const_oof < 1e-6`;
 - `max_pair_sigma_oof >= 5`;
 - at least two nights are represented;
-- at least one OOF offset is available for every scored epoch.
+- an OOF offset is available for every good epoch;
+- all OOF offsets for the source come from one connected component.
 
 This is a screening definition only.
 
@@ -118,6 +155,12 @@ Gold-sample thresholds must come from injection-recovery simulations:
 
 Numeric thresholds for a high-confidence catalogue are not selected from real
 candidates.
+
+The cadence-matched inspection-control sample in the first bundle is
+outcome-conditioned and is intended for dossier comparison only. The separate
+`INJECTION_RECOVERY_BASE_POPULATION` is selected from the primary eligible
+population without requiring a stable OOF outcome and is the starting point for
+future null and injection-recovery simulations.
 
 ## Candidate Robustness Checks
 
@@ -140,6 +183,8 @@ Minimum external controls:
 - Gaia DR3 non-single-star solutions;
 - Gaia DR3 variability tables;
 - SpecDis binary candidates;
+- SpecDis equal-mass binary candidates are used only as contextual matches,
+  not as confirmation of known multi-epoch RV variability;
 - SIMBAD;
 - International Variable Star Index;
 - APOGEE, LAMOST, and GALAH RV catalogues where overlapping.
@@ -151,8 +196,8 @@ KNOWN_BINARY
 KNOWN_VARIABLE
 KNOWN_PULSATOR
 KNOWN_RV_VARIABLE
+SPECDIS_EQUAL_MASS_BINARY_CANDIDATE
 NEW_DESI_RV_VARIABLE_CANDIDATE
 LIKELY_PIPELINE_ARTIFACT
 UNRESOLVED
 ```
-

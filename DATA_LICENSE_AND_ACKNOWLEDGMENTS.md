@@ -22,7 +22,8 @@ Transformations applied by this repository include:
 - applying source-disjoint diagnostic `PROGRAM:NIGHT` offsets from
   `desi-rv-audit`;
 - rebuilding source-level constant-RV screening metrics;
-- selecting a deterministic matched stable-control epoch bundle.
+- selecting deterministic cadence-matched inspection controls and an
+  injection-recovery base-population epoch bundle.
 
 Publications, reports, or derived works using these artifacts should cite the
 DESI DR1 release paper, the DESI DR1 Stellar Catalogue paper, the Zenodo

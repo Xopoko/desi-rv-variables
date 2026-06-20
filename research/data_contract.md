@@ -2,7 +2,8 @@
 
 ## `source_summary_oof.parquet`
 
-One row per source group with at least three OOF-correctable good epochs.
+One row per source group with at least three good epochs. Primary scoring is
+valid only for rows where `PRIMARY_COHORT == true`.
 
 Required columns:
 
@@ -11,9 +12,16 @@ GROUP_ID
 GROUP_KIND
 SOURCE_ID
 TARGETID
+N_EPOCHS_GOOD_TOTAL
+N_NIGHTS_GOOD_TOTAL
+N_PROGRAMS_GOOD_TOTAL
 N_EPOCHS_GOOD_OOF
 N_NIGHTS_GOOD_OOF
 N_PROGRAMS_GOOD_OOF
+OOF_EPOCH_COVERAGE_FRACTION
+N_OOF_COMPONENTS
+OOF_SCORING_STATUS
+PRIMARY_COHORT
 TIME_BASELINE_DAYS_OOF
 DOMINANT_PROGRAM
 MEDIAN_SN_R
@@ -33,14 +41,22 @@ MAX_DELTA_VRAD_OOF
 CLASSIFICATION_BEFORE
 CLASSIFICATION_OOF
 WAS_STRICT_SCREENING_CANDIDATE
+REMAINS_OOF_OUTLIER
+IS_CADENCE_MATCHED_INSPECTION_CONTROL
+IS_INJECTION_RECOVERY_BASE_POPULATION
 ```
+
+Rows with `OOF_SCORING_STATUS == CROSS_COMPONENT_UNSCORABLE` must not be used
+for direct before/after velocity comparisons because the audit offset gauge is
+only defined within a connected component.
 
 ## `candidate_epoch_bundle.parquet`
 
 All epochs for:
 
 - frozen strict screening candidates;
-- deterministic matched stable-control sources.
+- deterministic cadence-matched inspection-control sources;
+- deterministic injection-recovery base-population sources.
 
 Required columns:
 
@@ -64,9 +80,12 @@ VRAD_ERR_ADOPTED
 PROGRAM_NIGHT_LABEL
 PROGRAM_NIGHT_FOLD
 PROGRAM_NIGHT_OFFSET_OOF
+PROGRAM_NIGHT_COMPONENT_OOF
 OOF_OFFSET_AVAILABLE
 VRAD_CORRECTED_OOF
 VRAD_ERROR_CALIBRATED
+IS_CADENCE_MATCHED_INSPECTION_CONTROL
+IS_INJECTION_RECOVERY_BASE_POPULATION
 SN_B
 SN_R
 SN_Z
@@ -86,3 +105,15 @@ CHISQ_TOT
 CHISQ_C_TOT
 ```
 
+## `strict_candidate_transition_table.csv`
+
+Mutually exclusive aggregate transitions for the frozen strict candidates:
+
+```text
+BEFORE_CLASS
+OOF_CLASS
+N
+```
+
+Rows where `BEFORE_CLASS == UNSCORABLE` are coverage or component attrition,
+not evidence of correction-induced reclassification.

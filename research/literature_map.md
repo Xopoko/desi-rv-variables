@@ -40,8 +40,12 @@ https://arxiv.org/abs/2503.02291
 
 Use:
 
-- external context for DESI DR1 distance products and possible binary systems;
-- avoid presenting generic RV variability search as novel without crossmatch.
+- external context for DESI DR1 distance products and equal-mass
+  binary-candidate flags;
+- do not treat a SpecDis match as confirmation of known multi-epoch RV
+  variability;
+- avoid presenting generic RV variability search as novel without versioned
+  crossmatches.
 
 ## The Joker
 
@@ -72,4 +76,3 @@ Use:
 
 - exclusion boundary for the first project stage. This project does not start
   with black-hole or hypervelocity-star claims.
-
