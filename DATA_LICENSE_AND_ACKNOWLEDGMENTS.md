@@ -9,9 +9,10 @@ acknowledgment requirements documented by DESI:
 
 https://data.desi.lbl.gov/doc/acknowledgments/
 
-The ignored Parquet files under `artifacts/` and the aggregate report under
-`reports/` are transformed/derived artifacts from public DESI DR1 data and
-should be treated as DESI-derived data products under those DESI terms.
+The ignored Parquet files under `artifacts/`, the aggregate report under
+`reports/`, and the release asset `candidate_sources_strict.csv.gz` are
+transformed/derived artifacts from public DESI DR1 data and should be treated
+as DESI-derived data products under those DESI terms.
 
 Transformations applied by this repository include:
 
@@ -54,21 +55,3 @@ Tohono O’odham Nation. Any opinions, findings, and conclusions or
 recommendations expressed in this material are those of the author(s) and do not
 necessarily reflect the views of the U.S. National Science Foundation, the U.S.
 Department of Energy, or any of the listed funding agencies.
-
-## Official DESI Disclaimer
-
-The DESI collaboration is responsible for this website, ensuring that its
-content is accurate and up to date. However, it takes no responsibility for
-errors or omissions. The DESI collaboration accepts no liability for any loss or
-damage resulting from the use of material from this website.
-
-## Official DESI Thanks to Colleagues and Supporters
-
-We would like to acknowledge the countless colleagues, friends, and family
-members whose support has been invaluable throughout DESI’s development from its
-initial planning to this data release. Their contributions, both professional
-and personal, have been essential to the success of this project. We especially
-remember those who are no longer with us but whose work and dedication continue
-to influence and inspire our scientific endeavors.
-
-Their legacy lives on through this data and the discoveries it will enable.

@@ -3,12 +3,16 @@ import pandas as pd
 
 from desi_rv_variables.oof import (
     _cadence_matched_inspection_control_ids,
+    _sha256,
     apply_oof_program_night_offsets,
+    candidate_shuffle_transition_null,
+    fold_fixture,
     load_program_night_offsets,
     program_night_labels,
     source_fold_ids,
     strict_candidate_transition_table,
     summarize_oof_sources,
+    validate_fold_fixture,
     validate_parameters,
 )
 
@@ -24,6 +28,21 @@ def test_program_night_label_matches_audit_shape():
 def test_fold_fixture_matches_pinned_hashing():
     group_ids = pd.Series([1, 101, 202, 303, 123456789012345678, -55], dtype="int64")
     assert source_fold_ids(group_ids, n_folds=5).tolist() == [1, 4, 3, 0, 0, 4]
+    assert fold_fixture(n_folds=5) == [
+        {"group_id": 1, "fold": 1},
+        {"group_id": 101, "fold": 4},
+        {"group_id": 202, "fold": 3},
+        {"group_id": 303, "fold": 0},
+        {"group_id": 123456789012345678, "fold": 0},
+        {"group_id": -55, "fold": 4},
+    ]
+    validate_fold_fixture(n_folds=5)
+    try:
+        validate_fold_fixture(n_folds=4)
+    except ValueError as error:
+        assert "n_folds=5" in str(error)
+    else:
+        raise AssertionError("non-frozen fold count should fail")
 
 
 def test_offset_loader_requires_component_and_expected_folds(tmp_path):
@@ -49,6 +68,12 @@ def test_offset_loader_requires_component_and_expected_folds(tmp_path):
         assert "do not match expected" in str(error)
     else:
         raise AssertionError("wrong fold set should fail")
+
+
+def test_sha256_helper_detects_input_drift(tmp_path):
+    path = tmp_path / "input.txt"
+    path.write_text("abc", encoding="utf-8")
+    assert _sha256(path) == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
 
 
 def test_oof_offset_is_subtracted_for_matching_fold_label():
@@ -152,7 +177,7 @@ def test_strict_transition_table_uses_primary_complete_case_only():
         (row.BEFORE_CLASS, row.OOF_CLASS): row.N
         for row in table.itertuples(index=False)
     }
-    assert counts[("OUTLIER", "STABLE")] == 1
+    assert counts[("OUTLIER", "BELOW_SCREENING_THRESHOLD")] == 1
     assert counts[("OUTLIER", "OUTLIER")] == 1
     assert counts[("UNSCORABLE", "CROSS_COMPONENT_UNSCORABLE")] == 1
     assert counts[("UNSCORABLE", "MISSING_FROM_SUMMARY")] == 1
@@ -173,3 +198,43 @@ def test_control_ratio_zero_returns_no_controls():
         }
     )
     assert _cadence_matched_inspection_control_ids(summary, {1}, ratio=0.0) == set()
+
+
+def test_candidate_shuffle_null_preserves_candidate_level_scoring_shape():
+    frame = pd.DataFrame(
+        {
+            "GROUP_ID": [1, 1, 1],
+            "GROUP_KIND": ["GAIA_SOURCE_ID"] * 3,
+            "SOURCE_ID": [10, 10, 10],
+            "TARGETID": [100, 100, 100],
+            "MJD": [1.0, 5.0, 10.0],
+            "NIGHT": [20210101, 20210105, 20210110],
+            "PROGRAM": ["BRIGHT", "BRIGHT", "BRIGHT"],
+            "GOOD_EPOCH": [True, True, True],
+            "VRAD_ADOPTED": [0.0, 20.0, 0.0],
+            "VRAD_ERR_ADOPTED": [1.0, 1.0, 1.0],
+            "SN_R": [20.0, 21.0, 19.0],
+            "TEFF": [5500.0, 5500.0, 5500.0],
+            "LOGG": [4.3, 4.3, 4.3],
+            "FEH": [-1.0, -1.0, -1.0],
+        }
+    )
+    fold = int(source_fold_ids(pd.Series([1]), 5).iloc[0])
+    offsets = pd.DataFrame(
+        {
+            "FOLD": [fold, fold, fold],
+            "LABEL": ["BRIGHT:20210101", "BRIGHT:20210105", "BRIGHT:20210110"],
+            "OFFSET_KMS": [0.0, 20.0, 0.0],
+            "COMPONENT": [0, 0, 0],
+        }
+    )
+    shuffled = candidate_shuffle_transition_null(
+        frame=frame,
+        offsets=offsets,
+        candidate_ids={1},
+        n_folds=5,
+        n_shuffles=2,
+        seed=1,
+    )
+    assert shuffled["SHUFFLE_ID"].tolist() == [0, 1]
+    assert set(shuffled.columns) >= {"N_OUTLIER_TO_BELOW_SCREENING_THRESHOLD"}

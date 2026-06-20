@@ -4,16 +4,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "desi-rv-variables"
-version = "0.1.1"
+version = "0.1.2"
 description = "Calibration-aware DESI DR1 radial-velocity variable candidate selection"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [{name = "Maksim Kudriavtsev"}]
 dependencies = [
-  "desi-rv-audit @ git+https://github.com/Xopoko/desi-rv-audit.git@v0.2.1",
+  "desi-rv-audit @ git+https://github.com/Xopoko/desi-rv-audit.git@25013f9d8443c761b394a317fe4b332420eb6002",
   "numpy>=1.24",
-  "pandas>=2.0",
+  "pandas==2.3.3",
   "scipy>=1.10",
   "pyarrow>=14",
   "astropy>=5.3",

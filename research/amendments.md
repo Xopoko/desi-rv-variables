@@ -17,3 +17,18 @@ formal preregistration.
   selected injection-recovery base population.
 - Publish the frozen strict candidate input as a checksummed release asset
   rather than requiring an untracked generated file from another checkout.
+
+## v0.1.2
+
+- Rename public transition label `STABLE` to
+  `BELOW_SCREENING_THRESHOLD`.
+- Add candidate-level shuffled-offset controls for strict-candidate
+  `OUTLIER -> BELOW_SCREENING_THRESHOLD` transitions.
+- Validate frozen FITS, backup-correction, offset-table, and strict-candidate
+  checksums before building.
+- Validate the runtime fold fixture before applying OOF offsets.
+- Publish sanitized manifest and aggregate CSVs under `reports/`.
+- Clarify that the injection-recovery base population is separately defined
+  but substantially overlaps with inspection controls.
+- Remove DESI website disclaimer text and state that this repository is an
+  independent exploratory analysis.

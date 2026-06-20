@@ -7,9 +7,10 @@ this is not a formal preregistration.
 ## Research Question
 
 After source-disjoint correction of residual `PROGRAM:NIGHT` velocity offsets,
-which stars remain robustly inconsistent with constant radial velocity, and
-what fraction of the original strict screening candidates changes
-classification after applying source-disjoint diagnostic corrections?
+which sources remain inconsistent with constant radial velocity under the
+frozen first-pass screening rule, and what fraction of the original strict
+screening candidates changes classification after applying source-disjoint
+diagnostic corrections?
 
 ## Primary Outcome
 
@@ -41,6 +42,12 @@ new_oof_outlier_fraction
 This avoids attributing unscorable sources or rule-reconciliation differences
 to a calibration effect.
 
+A candidate-level shuffled-offset control repeats source-level scoring after
+randomly permuting `PROGRAM:NIGHT` offsets within each `FOLD x PROGRAM` block
+while preserving label coverage and connected-component membership. This
+produces a null distribution for `OUTLIER -> BELOW_SCREENING_THRESHOLD`
+transitions among the frozen candidates.
+
 The primary outcome is reported overall and, where sample sizes support it, by:
 
 - dominant DESI program;
@@ -61,6 +68,11 @@ The first MAIN run uses:
 - published DESI DR1 backup correction `backup_correction.fits`;
 - diagnostic `PROGRAM:NIGHT` fold offsets from `desi-rv-audit` v0.2.1;
 - frozen strict screening list from the audit run.
+
+The frozen build validates SHA-256 values for the three DESI FITS inputs, the
+published backup correction, the diagnostic offset table, and the strict
+candidate list. It also validates the runtime fold fixture before applying
+out-of-fold offsets.
 
 No source ID is inspected before this protocol and the first bundle builder are
 committed.
@@ -101,6 +113,12 @@ VRAD_ERROR_CALIBRATED = sqrt(VRAD_ERR^2 + published_program_floor^2)
 This keeps the first selection conservative. Future analyses may re-estimate
 post-correction floors on training folds, but that must be a separate protocol
 amendment.
+
+The uncertainty of the estimated `PROGRAM:NIGHT` offset is not added to
+`VRAD_ERROR_CALIBRATED`. Therefore `p_const_oof` is a comparative screening
+statistic. It is not a fully calibrated probability and should not be used as a
+false-discovery-rate estimate without bootstrap or covariance modelling of the
+offsets.
 
 ## Source-Level Models
 

@@ -11,7 +11,8 @@ Required columns:
 GROUP_ID
 GROUP_KIND
 SOURCE_ID
-TARGETID
+FIRST_TARGETID
+N_DISTINCT_TARGETIDS
 N_EPOCHS_GOOD_TOTAL
 N_NIGHTS_GOOD_TOTAL
 N_PROGRAMS_GOOD_TOTAL
@@ -69,8 +70,15 @@ TARGETID
 MJD
 NIGHT
 EXPID
+EXPTIME
 SURVEY
 PROGRAM
+TARGET_RA
+TARGET_DEC
+GAIA_PHOT_G_MEAN_MAG
+PARALLAX
+RADIAL_VELOCITY
+RADIAL_VELOCITY_ERROR
 VRAD
 VRAD_ERR
 VRAD_OFFSET
@@ -86,6 +94,7 @@ VRAD_CORRECTED_OOF
 VRAD_ERROR_CALIBRATED
 IS_CADENCE_MATCHED_INSPECTION_CONTROL
 IS_INJECTION_RECOVERY_BASE_POPULATION
+GOOD_EPOCH
 SN_B
 SN_R
 SN_Z
@@ -117,3 +126,22 @@ N
 
 Rows where `BEFORE_CLASS == UNSCORABLE` are coverage or component attrition,
 not evidence of correction-induced reclassification.
+
+Public transition labels use `BELOW_SCREENING_THRESHOLD` for sources that do
+not satisfy the declared first-pass outlier rule. This does not mean the source
+is astrophysically stable.
+
+## Public aggregate report artifacts
+
+Tracked aggregate files under `reports/`:
+
+```text
+build_manifest_public.json
+strict_candidate_transition_table.csv
+primary_cohort_transition_table.csv
+candidate_shuffle_transition_null.csv
+threshold_sensitivity.csv
+metric_shift_summary.csv
+```
+
+These files contain no source-level rows or ranked source IDs.

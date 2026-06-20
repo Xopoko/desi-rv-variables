@@ -5,12 +5,16 @@
 Calibration-aware search infrastructure for DESI DR1 radial-velocity variable
 candidates.
 
+This is an independent exploratory analysis and is not an official DESI
+Collaboration data product.
+
 ## Frozen Question
 
 After source-disjoint correction of residual `PROGRAM:NIGHT` velocity offsets,
-which stars remain robustly inconsistent with constant radial velocity, and
-what fraction of the original strict screening candidates changes
-classification after applying source-disjoint diagnostic corrections?
+which sources remain inconsistent with constant radial velocity under the
+frozen first-pass screening rule, and what fraction of the original strict
+screening candidates changes classification after applying source-disjoint
+diagnostic corrections?
 
 This repository is a protocol-first follow-up to
 [`Xopoko/desi-rv-audit`](https://github.com/Xopoko/desi-rv-audit). The audit
@@ -47,12 +51,12 @@ Expected local inputs can be provided via environment variables:
 
 ```bash
 export DESI_RV_AUDIT_DATA_DIR=/path/to/desi-rv-audit/data
-export DESI_RV_AUDIT_ARTIFACT_DIR=/path/to/desi-rv-audit-public/reports/program_night_artifacts
+export DESI_RV_AUDIT_ARTIFACT_DIR=/path/to/desi-rv-audit/reports/program_night_artifacts
 export DESI_RV_STRICT_CANDIDATES=/path/to/candidate_sources_strict.csv
 ```
 
 If `DESI_RV_STRICT_CANDIDATES` is not set, `scripts/build_local_bundles.sh`
-downloads `candidate_sources_strict.csv.gz` from this repository's `v0.1.1`
+downloads `candidate_sources_strict.csv.gz` from this repository's `v0.1.2`
 release and verifies its SHA-256 checksum before building local artifacts.
 
 The DESI DR1 stellar VAC reports 10,012,925 single-epoch spectra with stellar
@@ -76,7 +80,10 @@ Outputs:
 artifacts/source_summary_oof.parquet
 artifacts/candidate_epoch_bundle.parquet
 artifacts/strict_candidate_transition_table.csv
+artifacts/primary_cohort_transition_table.csv
+artifacts/candidate_shuffle_transition_null.csv
 artifacts/build_manifest.json
+reports/build_manifest_public.json
 ```
 
 `source_summary_oof.parquet` contains source-level before/after constant-RV
@@ -91,6 +98,10 @@ and inspection, not for public catalog claims.
 separates complete-case reclassification from OOF coverage loss and
 cross-component exclusions.
 
+The compact tracked files under `reports/` publish the sanitized manifest,
+transition tables, shuffled-candidate null control, threshold sensitivity, and
+metric-shift summaries without source-level rows.
+
 ## Method Boundary
 
 The `PROGRAM:NIGHT` offsets are applied out-of-fold:
@@ -103,6 +114,8 @@ The `PROGRAM:NIGHT` offsets are applied out-of-fold:
 5. Primary source-level scoring requires all good epochs to have OOF offsets
    from one connected component. Cross-component sources are marked
    `CROSS_COMPONENT_UNSCORABLE`.
+6. The runtime fold fixture and frozen input SHA-256 values are checked before
+   the build proceeds.
 
 The split is source-disjoint, not night-disjoint. This tests transfer across
 different stars observed on the same nights. It does not test extrapolation to
@@ -112,6 +125,10 @@ This is an exploratory analysis developed on the public DESI DR1 MAIN sample.
 The protocol was internally frozen before ranked source-ID inspection, but it
 is not a formal preregistration. Confirmation would require a pre-specified
 analysis on an independent data slice or future release.
+
+`VRAD_ERROR_CALIBRATED` does not include uncertainty in the estimated
+`PROGRAM:NIGHT` offsets. The resulting `p_const_oof` values are screening
+statistics, not fully calibrated posterior probabilities or FDR estimates.
 
 ## References
 

@@ -20,6 +20,22 @@ from desi_rv_audit.quality import QualityRules, quality_mask
 DEFAULT_BACKUP_CORRECTION_MD5 = "f48a4b21b541e94d61f4372f4c555f12"
 STRICT_CANDIDATES_SHA256 = "5c96d5cc823725f9c80f133c11f0aad3ca09c7eaa678a5d694b095eb46944b47"
 STRICT_CANDIDATES_GZ_SHA256 = "7958ac85c59e5228069710f44420483373e7fddef58f2fb0aa4b5b8b06aed2e3"
+EXPECTED_PROGRAM_NIGHT_OFFSETS_SHA256 = "d3d1de75f2140cc77cd64bccaf944e4e76b4b2971d82a2f32e66ee2c024e9a30"
+EXPECTED_DESI_RV_AUDIT_ARTIFACT_COMMIT = "6b3c116cd77cc0254c9f26fd0e98fdebdaa4807b"
+EXPECTED_BACKUP_CORRECTION_SHA256 = "eb4da91267db39f285a277989489f991ea48371336efedd28bd07d2b58e4a400"
+EXPECTED_FITS_SHA256_BY_NAME = {
+    "rvpix_exp-main-backup.fits": "8124fdf11983676eb8ed9e8a298dd9b12e74e066a1e77e9170360c0e58be8669",
+    "rvpix_exp-main-bright.fits": "59f709a4695ff2e63ac6ce9cbf7fe3c1c1c63ab8269907d4963d22f27b4e6b18",
+    "rvpix_exp-main-dark.fits": "5b6eeaed1f6bffb287f533cc6b171c7843d3df9cca6ab53b8415b6b43108943b",
+}
+EXPECTED_FOLD_FIXTURE = [
+    {"group_id": 1, "fold": 1},
+    {"group_id": 101, "fold": 4},
+    {"group_id": 202, "fold": 3},
+    {"group_id": 303, "fold": 0},
+    {"group_id": 123456789012345678, "fold": 0},
+    {"group_id": -55, "fold": 4},
+]
 
 
 @dataclass(frozen=True)
@@ -34,6 +50,7 @@ def validate_parameters(
     n_folds: int,
     control_ratio: float,
     injection_base_ratio: float,
+    n_candidate_shuffles: int = 0,
 ) -> None:
     if n_folds < 2:
         raise ValueError("n_folds must be at least 2")
@@ -43,6 +60,8 @@ def validate_parameters(
         raise ValueError("control_ratio must be non-negative")
     if injection_base_ratio < 0:
         raise ValueError("injection_base_ratio must be non-negative")
+    if n_candidate_shuffles < 0:
+        raise ValueError("n_candidate_shuffles must be non-negative")
 
 
 def _sha256(path: str | Path) -> str:
@@ -56,6 +75,14 @@ def _sha256(path: str | Path) -> str:
 def _file_record(path: str | Path) -> dict[str, object]:
     path = Path(path)
     return {"path": str(path), "size": path.stat().st_size, "sha256": _sha256(path)}
+
+
+def _validate_sha256(path: str | Path, expected_sha256: str, label: str) -> None:
+    actual = _sha256(path)
+    if actual != expected_sha256:
+        raise ValueError(
+            f"{label} SHA-256 mismatch for {path}: expected {expected_sha256}, got {actual}"
+        )
 
 
 def _git_commit_for_path(path: str | Path) -> str:
@@ -111,6 +138,60 @@ def source_fold_ids(group_ids: pd.Series, n_folds: int = 5) -> pd.Series:
         dtype=np.uint64
     )
     return pd.Series((hashed % np.uint64(n_folds)).astype(np.int64), index=group_ids.index)
+
+
+def fold_fixture(n_folds: int = 5) -> list[dict[str, int]]:
+    group_ids = pd.Series([item["group_id"] for item in EXPECTED_FOLD_FIXTURE], dtype="int64")
+    return [
+        {"group_id": int(group_id), "fold": int(fold)}
+        for group_id, fold in zip(group_ids, source_fold_ids(group_ids, n_folds=n_folds))
+    ]
+
+
+def validate_fold_fixture(n_folds: int = 5) -> None:
+    if n_folds != 5:
+        raise ValueError("The frozen PROGRAM:NIGHT offset table is defined for n_folds=5")
+    actual = fold_fixture(n_folds=n_folds)
+    if actual != EXPECTED_FOLD_FIXTURE:
+        raise RuntimeError(
+            "Fold fixture mismatch. pandas hashing behavior changed or the fold algorithm drifted."
+        )
+
+
+def validate_frozen_inputs(
+    fits_paths: list[Path],
+    backup_correction_path: Path,
+    offsets_path: Path,
+    check_git_commit: bool = True,
+) -> None:
+    seen = set()
+    for path in fits_paths:
+        name = path.name
+        expected = EXPECTED_FITS_SHA256_BY_NAME.get(name)
+        if expected is None:
+            raise ValueError(f"Unexpected FITS input for frozen MAIN workflow: {path}")
+        _validate_sha256(path, expected, f"{name}")
+        seen.add(name)
+    missing = set(EXPECTED_FITS_SHA256_BY_NAME) - seen
+    if missing:
+        raise ValueError(f"Missing frozen FITS inputs: {', '.join(sorted(missing))}")
+    _validate_sha256(
+        backup_correction_path,
+        EXPECTED_BACKUP_CORRECTION_SHA256,
+        "backup correction",
+    )
+    _validate_sha256(
+        offsets_path,
+        EXPECTED_PROGRAM_NIGHT_OFFSETS_SHA256,
+        "diagnostic PROGRAM:NIGHT offsets",
+    )
+    if check_git_commit:
+        actual_commit = _git_commit_for_path(offsets_path)
+        if actual_commit != EXPECTED_DESI_RV_AUDIT_ARTIFACT_COMMIT:
+            raise ValueError(
+                "desi-rv-audit artifact commit mismatch for PROGRAM:NIGHT offsets: "
+                f"expected {EXPECTED_DESI_RV_AUDIT_ARTIFACT_COMMIT}, got {actual_commit or 'unavailable'}"
+            )
 
 
 def program_night_labels(program: pd.Series, night: pd.Series) -> pd.Series:
@@ -259,7 +340,8 @@ def summarize_oof_sources(epoch_table: pd.DataFrame, good_mask_column: str = "GO
     summary = total_grouped.agg(
         GROUP_KIND=("GROUP_KIND", "first"),
         SOURCE_ID=("SOURCE_ID", "first"),
-        TARGETID=("TARGETID", "first"),
+        FIRST_TARGETID=("TARGETID", "first"),
+        N_DISTINCT_TARGETIDS=("TARGETID", "nunique"),
         N_EPOCHS_GOOD_TOTAL=("VRAD_ADOPTED", "size"),
         N_NIGHTS_GOOD_TOTAL=("NIGHT", "nunique"),
         N_PROGRAMS_GOOD_TOTAL=("PROGRAM", "nunique"),
@@ -455,7 +537,7 @@ def summarize_oof_sources(epoch_table: pd.DataFrame, good_mask_column: str = "GO
             "VRAD_OOF_MAX",
         ]
     ).reset_index()
-    for column in ("GROUP_ID", "SOURCE_ID", "TARGETID"):
+    for column in ("GROUP_ID", "SOURCE_ID", "FIRST_TARGETID"):
         if column in summary.columns:
             summary[column] = pd.to_numeric(summary[column], errors="coerce").astype("Int64")
     return summary.sort_values(
@@ -495,7 +577,7 @@ def _transition_class(label: object) -> str:
     if value == "CONSTANT_RV_OUTLIER":
         return "OUTLIER"
     if value == "STABLE_LIKE":
-        return "STABLE"
+        return "BELOW_SCREENING_THRESHOLD"
     if value == "INSUFFICIENT_BASELINE":
         return "INSUFFICIENT_BASELINE"
     if value == "INSUFFICIENT_EPOCHS":
@@ -537,6 +619,178 @@ def strict_candidate_transition_table(
         .groupby(["BEFORE_CLASS", "OOF_CLASS"], as_index=False, sort=True)["N"]
         .sum()
     )
+
+
+def primary_cohort_transition_table(summary: pd.DataFrame) -> pd.DataFrame:
+    work = summary[summary["PRIMARY_COHORT"].astype(bool)].copy()
+    if work.empty:
+        return pd.DataFrame(columns=["BEFORE_CLASS", "OOF_CLASS", "N"])
+    rows = pd.DataFrame(
+        {
+            "BEFORE_CLASS": [_transition_class(value) for value in work["CLASSIFICATION_BEFORE"]],
+            "OOF_CLASS": [_transition_class(value) for value in work["CLASSIFICATION_OOF"]],
+        }
+    )
+    return rows.groupby(["BEFORE_CLASS", "OOF_CLASS"], as_index=False, sort=True).size().rename(
+        columns={"size": "N"}
+    )
+
+
+def _screening_mask(
+    summary: pd.DataFrame,
+    prefix: str,
+    p_threshold: float,
+    sigma_threshold: float,
+) -> pd.Series:
+    return (
+        summary["PRIMARY_COHORT"].astype(bool)
+        & (summary["N_EPOCHS_GOOD_OOF"] >= 3)
+        & (summary["TIME_BASELINE_DAYS_OOF"] > 1.0)
+        & (summary["N_NIGHTS_GOOD_OOF"] >= 2)
+        & (pd.to_numeric(summary[f"P_CONST_{prefix}"], errors="coerce") < p_threshold)
+        & (pd.to_numeric(summary[f"MAX_PAIR_SIGMA_{prefix}"], errors="coerce") >= sigma_threshold)
+    )
+
+
+def threshold_sensitivity_table(
+    summary: pd.DataFrame,
+    candidate_ids: set[int],
+    p_thresholds: tuple[float, ...] = (1e-5, 1e-6, 1e-7),
+    sigma_thresholds: tuple[float, ...] = (4.0, 5.0, 6.0),
+) -> pd.DataFrame:
+    rows: list[dict[str, object]] = []
+    cohorts = {
+        "PRIMARY_ALL": summary["PRIMARY_COHORT"].astype(bool),
+        "FROZEN_STRICT_CANDIDATES": summary["GROUP_ID"].astype("int64").isin(candidate_ids)
+        & summary["PRIMARY_COHORT"].astype(bool),
+    }
+    for cohort_name, cohort_mask in cohorts.items():
+        for p_threshold in p_thresholds:
+            for sigma_threshold in sigma_thresholds:
+                before = _screening_mask(summary, "BEFORE", p_threshold, sigma_threshold) & cohort_mask
+                after = _screening_mask(summary, "OOF", p_threshold, sigma_threshold) & cohort_mask
+                rows.append(
+                    {
+                        "COHORT": cohort_name,
+                        "P_THRESHOLD": p_threshold,
+                        "SIGMA_THRESHOLD": sigma_threshold,
+                        "N_COHORT": int(cohort_mask.sum()),
+                        "N_BEFORE_OUTLIER": int(before.sum()),
+                        "N_OOF_OUTLIER": int(after.sum()),
+                        "N_OUTLIER_TO_BELOW_SCREENING_THRESHOLD": int((before & ~after).sum()),
+                        "N_BELOW_SCREENING_THRESHOLD_TO_OUTLIER": int((~before & after).sum()),
+                    }
+                )
+    return pd.DataFrame(rows)
+
+
+def metric_shift_summary_table(
+    summary: pd.DataFrame,
+    candidate_ids: set[int],
+) -> pd.DataFrame:
+    cohorts = {
+        "PRIMARY_ALL": summary["PRIMARY_COHORT"].astype(bool),
+        "FROZEN_STRICT_CANDIDATES": summary["GROUP_ID"].astype("int64").isin(candidate_ids)
+        & summary["PRIMARY_COHORT"].astype(bool),
+    }
+    metrics = {
+        "DELTA_LOG_P_CONST": ("LOG_P_CONST_OOF", "LOG_P_CONST_BEFORE"),
+        "DELTA_MAX_PAIR_SIGMA": ("MAX_PAIR_SIGMA_OOF", "MAX_PAIR_SIGMA_BEFORE"),
+        "DELTA_MAX_DELTA_VRAD": ("MAX_DELTA_VRAD_OOF", "MAX_DELTA_VRAD_BEFORE"),
+    }
+    quantiles = [0.01, 0.05, 0.5, 0.95, 0.99]
+    rows: list[dict[str, object]] = []
+    for cohort_name, cohort_mask in cohorts.items():
+        cohort = summary[cohort_mask]
+        for metric_name, (after_column, before_column) in metrics.items():
+            delta = (
+                pd.to_numeric(cohort[after_column], errors="coerce")
+                - pd.to_numeric(cohort[before_column], errors="coerce")
+            ).replace([np.inf, -np.inf], np.nan)
+            valid = delta.dropna()
+            row = {
+                "COHORT": cohort_name,
+                "METRIC": metric_name,
+                "N": int(len(valid)),
+                "MEAN": float(valid.mean()) if len(valid) else np.nan,
+            }
+            for quantile in quantiles:
+                row[f"Q{int(quantile * 100):02d}"] = (
+                    float(valid.quantile(quantile)) if len(valid) else np.nan
+                )
+            rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def shuffled_program_night_offsets(
+    offsets: pd.DataFrame,
+    rng: np.random.Generator,
+) -> pd.DataFrame:
+    result = offsets.copy()
+    result["_PROGRAM"] = result["LABEL"].astype("string").str.split(":", n=1).str[0]
+    for _, group in result.groupby(["FOLD", "_PROGRAM"], sort=False):
+        if len(group) < 2:
+            continue
+        shuffled = rng.permutation(group["OFFSET_KMS"].to_numpy(dtype=float))
+        result.loc[group.index, "OFFSET_KMS"] = shuffled
+    return result.drop(columns=["_PROGRAM"])
+
+
+def candidate_shuffle_transition_null(
+    frame: pd.DataFrame,
+    offsets: pd.DataFrame,
+    candidate_ids: set[int],
+    n_folds: int,
+    n_shuffles: int,
+    seed: int,
+) -> pd.DataFrame:
+    columns = [
+        "SHUFFLE_ID",
+        "N_BEFORE_OUTLIER_PRIMARY",
+        "N_OUTLIER_TO_OUTLIER",
+        "N_OUTLIER_TO_BELOW_SCREENING_THRESHOLD",
+        "N_BELOW_SCREENING_THRESHOLD_TO_OUTLIER",
+        "OOF_RECLASSIFICATION_FRACTION",
+    ]
+    if n_shuffles == 0 or not candidate_ids:
+        return pd.DataFrame(columns=columns)
+    candidate_frame = frame[frame["GROUP_ID"].astype("int64").isin(candidate_ids)].copy()
+    rng = np.random.default_rng(seed)
+    rows: list[dict[str, object]] = []
+    for shuffle_id in range(n_shuffles):
+        shuffled_offsets = shuffled_program_night_offsets(offsets, rng)
+        shuffled_frame = apply_oof_program_night_offsets(
+            candidate_frame,
+            shuffled_offsets,
+            n_folds=n_folds,
+        )
+        shuffled_summary = summarize_oof_sources(shuffled_frame)
+        transition = strict_candidate_transition_table(shuffled_summary, candidate_ids)
+        counts = {
+            (row.BEFORE_CLASS, row.OOF_CLASS): int(row.N)
+            for row in transition.itertuples(index=False)
+        }
+        before_outlier = sum(
+            value for (before, _after), value in counts.items() if before == "OUTLIER"
+        )
+        outlier_to_below = counts.get(("OUTLIER", "BELOW_SCREENING_THRESHOLD"), 0)
+        rows.append(
+            {
+                "SHUFFLE_ID": shuffle_id,
+                "N_BEFORE_OUTLIER_PRIMARY": int(before_outlier),
+                "N_OUTLIER_TO_OUTLIER": counts.get(("OUTLIER", "OUTLIER"), 0),
+                "N_OUTLIER_TO_BELOW_SCREENING_THRESHOLD": outlier_to_below,
+                "N_BELOW_SCREENING_THRESHOLD_TO_OUTLIER": counts.get(
+                    ("BELOW_SCREENING_THRESHOLD", "OUTLIER"),
+                    0,
+                ),
+                "OOF_RECLASSIFICATION_FRACTION": _safe_fraction(
+                    int(outlier_to_below),
+                    int(before_outlier),
+                ),
+            }
+        )
+    return pd.DataFrame(rows, columns=columns)
 
 
 def _candidate_group_ids(
@@ -642,24 +896,107 @@ def _safe_fraction(numerator: int, denominator: int) -> float | None:
     return numerator / denominator
 
 
+def _public_file_record(record: dict[str, object] | None) -> dict[str, object] | None:
+    if record is None:
+        return None
+    return {
+        "name": Path(str(record["path"])).name,
+        "size": record["size"],
+        "sha256": record["sha256"],
+    }
+
+
+def _public_manifest(manifest: dict[str, object]) -> dict[str, object]:
+    input_files = manifest["input_files"]
+    output_files = manifest["output_files"]
+    return {
+        "parameters": manifest["parameters"],
+        "input_files": {
+            "fits": [_public_file_record(record) for record in input_files["fits"]],
+            "backup_correction": _public_file_record(input_files["backup_correction"]),
+            "program_night_offsets": _public_file_record(input_files["program_night_offsets"]),
+            "strict_candidates": _public_file_record(input_files["strict_candidates"]),
+        },
+        "repositories": manifest["repositories"],
+        "runtime": manifest["runtime"],
+        "fold_fixture": manifest["fold_fixture"],
+        "offset_table": manifest["offset_table"],
+        "oof_scoring_status_counts": manifest["oof_scoring_status_counts"],
+        "n_sources_oof_summary": manifest["n_sources_oof_summary"],
+        "n_strict_screening_candidates_input": manifest["n_strict_screening_candidates_input"],
+        "n_strict_screening_candidates_in_summary": manifest[
+            "n_strict_screening_candidates_in_summary"
+        ],
+        "n_strict_screening_candidates_primary_complete_case": manifest[
+            "n_strict_screening_candidates_primary_complete_case"
+        ],
+        "n_strict_screening_candidates_before_outlier_primary": manifest[
+            "n_strict_screening_candidates_before_outlier_primary"
+        ],
+        "n_strict_screening_candidates_oof_outlier_primary": manifest[
+            "n_strict_screening_candidates_oof_outlier_primary"
+        ],
+        "n_strict_screening_candidates_reclassified_primary": manifest[
+            "n_strict_screening_candidates_reclassified_primary"
+        ],
+        "coverage_attrition_fraction": manifest["coverage_attrition_fraction"],
+        "before_rule_reconciliation_fraction": manifest[
+            "before_rule_reconciliation_fraction"
+        ],
+        "oof_reclassification_fraction": manifest["oof_reclassification_fraction"],
+        "new_oof_outlier_fraction": manifest["new_oof_outlier_fraction"],
+        "strict_candidate_transition_table": manifest["strict_candidate_transition_table"],
+        "primary_cohort_transition_table": manifest["primary_cohort_transition_table"],
+        "candidate_shuffle_transition_null_summary": manifest[
+            "candidate_shuffle_transition_null_summary"
+        ],
+        "n_oof_outliers": manifest["n_oof_outliers"],
+        "n_new_oof_outliers_not_in_strict_screening": manifest[
+            "n_new_oof_outliers_not_in_strict_screening"
+        ],
+        "n_primary_non_strict_sources": manifest["n_primary_non_strict_sources"],
+        "n_candidate_epoch_bundle_rows": manifest["n_candidate_epoch_bundle_rows"],
+        "n_bundle_sources": manifest["n_bundle_sources"],
+        "n_cadence_matched_inspection_control_sources": manifest[
+            "n_cadence_matched_inspection_control_sources"
+        ],
+        "n_injection_recovery_base_population_sources": manifest[
+            "n_injection_recovery_base_population_sources"
+        ],
+        "n_control_sources_in_both_inspection_and_injection": manifest[
+            "n_control_sources_in_both_inspection_and_injection"
+        ],
+        "output_files": {
+            key: _public_file_record(record) for key, record in output_files.items()
+        },
+    }
+
+
 def build_bundles(
     fits_paths: list[str | Path],
     backup_correction_path: str | Path,
     offsets_path: str | Path,
     output_dir: str | Path,
     strict_candidates_path: str | Path | None = None,
+    public_report_dir: str | Path | None = None,
     min_sn_r: float = 5.0,
     n_folds: int = 5,
     control_ratio: float = 1.0,
     injection_base_ratio: float = 1.0,
+    n_candidate_shuffles: int = 20,
+    candidate_shuffle_seed: int = 20260620,
     backup_correction_md5: str = DEFAULT_BACKUP_CORRECTION_MD5,
     strict_candidates_sha256: str | None = STRICT_CANDIDATES_SHA256,
+    check_frozen_input_hashes: bool = True,
+    check_offsets_git_commit: bool = True,
+    allow_empty_candidates: bool = False,
 ) -> BundleBuildResult:
     validate_parameters(
         min_sn_r=min_sn_r,
         n_folds=n_folds,
         control_ratio=control_ratio,
         injection_base_ratio=injection_base_ratio,
+        n_candidate_shuffles=n_candidate_shuffles,
     )
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -667,6 +1004,16 @@ def build_bundles(
     backup_correction_path = Path(backup_correction_path)
     offsets_path = Path(offsets_path)
     strict_candidates_path_obj = Path(strict_candidates_path) if strict_candidates_path else None
+    if strict_candidates_path_obj is None and not allow_empty_candidates:
+        raise ValueError("--strict-candidates is required for the frozen build workflow")
+    validate_fold_fixture(n_folds=n_folds)
+    if check_frozen_input_hashes:
+        validate_frozen_inputs(
+            fits_paths=fits_paths,
+            backup_correction_path=backup_correction_path,
+            offsets_path=offsets_path,
+            check_git_commit=check_offsets_git_commit,
+        )
 
     frame = load_many(fits_paths, strict_desi_main=True)
     frame = apply_velocity_calibration(
@@ -708,6 +1055,17 @@ def build_bundles(
     n_strict_oof_outlier_primary = int(primary_strict["REMAINS_OOF_OUTLIER"].sum())
     n_new_oof_outliers = int(primary_non_strict["REMAINS_OOF_OUTLIER"].sum())
     transition = strict_candidate_transition_table(summary, candidate_ids)
+    primary_transition = primary_cohort_transition_table(summary)
+    threshold_sensitivity = threshold_sensitivity_table(summary, candidate_ids)
+    metric_shift_summary = metric_shift_summary_table(summary, candidate_ids)
+    shuffled_null = candidate_shuffle_transition_null(
+        frame=frame,
+        offsets=offsets,
+        candidate_ids=candidate_ids,
+        n_folds=n_folds,
+        n_shuffles=n_candidate_shuffles,
+        seed=candidate_shuffle_seed,
+    )
 
     inspection_control_ids = _cadence_matched_inspection_control_ids(
         summary,
@@ -752,20 +1110,36 @@ def build_bundles(
     source_path = output_dir / "source_summary_oof.parquet"
     bundle_path = output_dir / "candidate_epoch_bundle.parquet"
     transition_path = output_dir / "strict_candidate_transition_table.csv"
+    primary_transition_path = output_dir / "primary_cohort_transition_table.csv"
+    threshold_sensitivity_path = output_dir / "threshold_sensitivity.csv"
+    metric_shift_summary_path = output_dir / "metric_shift_summary.csv"
+    shuffled_null_path = output_dir / "candidate_shuffle_transition_null.csv"
     manifest_path = output_dir / "build_manifest.json"
     summary.to_parquet(source_path, index=False)
     bundle[_bundle_columns(bundle)].to_parquet(bundle_path, index=False)
     transition.to_csv(transition_path, index=False)
+    primary_transition.to_csv(primary_transition_path, index=False)
+    threshold_sensitivity.to_csv(threshold_sensitivity_path, index=False)
+    metric_shift_summary.to_csv(metric_shift_summary_path, index=False)
+    shuffled_null.to_csv(shuffled_null_path, index=False)
     repo_root = Path(__file__).resolve().parents[2]
-    fold_fixture_ids = pd.Series([1, 101, 202, 303, 123456789012345678, -55], dtype="int64")
+    inspection_and_injection_overlap = inspection_control_ids & injection_base_ids
+    shuffled_reclass = pd.to_numeric(
+        shuffled_null["N_OUTLIER_TO_BELOW_SCREENING_THRESHOLD"],
+        errors="coerce",
+    )
     manifest = {
         "parameters": {
             "min_sn_r": min_sn_r,
             "n_folds": n_folds,
             "control_ratio": control_ratio,
             "injection_base_ratio": injection_base_ratio,
+            "n_candidate_shuffles": n_candidate_shuffles,
+            "candidate_shuffle_seed": candidate_shuffle_seed,
             "backup_correction_md5": backup_correction_md5,
             "strict_candidates_sha256": strict_candidates_sha256 or "",
+            "check_frozen_input_hashes": check_frozen_input_hashes,
+            "check_offsets_git_commit": check_offsets_git_commit,
         },
         "input_files": {
             "fits": [_file_record(path) for path in fits_paths],
@@ -788,13 +1162,7 @@ def build_bundles(
             "platform": platform.platform(),
             "packages": _package_versions(),
         },
-        "fold_fixture": [
-            {"group_id": int(group_id), "fold": int(fold)}
-            for group_id, fold in zip(
-                fold_fixture_ids,
-                source_fold_ids(fold_fixture_ids, n_folds=n_folds),
-            )
-        ],
+        "fold_fixture": fold_fixture(n_folds=n_folds),
         "offset_table": {
             "n_rows": int(len(offsets)),
             "component_counts": {
@@ -824,21 +1192,62 @@ def build_bundles(
         ),
         "new_oof_outlier_fraction": _safe_fraction(n_new_oof_outliers, int(len(primary_non_strict))),
         "strict_candidate_transition_table": transition.to_dict("records"),
+        "primary_cohort_transition_table": primary_transition.to_dict("records"),
+        "candidate_shuffle_transition_null_summary": {
+            "n_shuffles": int(len(shuffled_null)),
+            "min_outlier_to_below_screening_threshold": (
+                int(shuffled_reclass.min()) if len(shuffled_reclass.dropna()) else None
+            ),
+            "median_outlier_to_below_screening_threshold": (
+                float(shuffled_reclass.median()) if len(shuffled_reclass.dropna()) else None
+            ),
+            "max_outlier_to_below_screening_threshold": (
+                int(shuffled_reclass.max()) if len(shuffled_reclass.dropna()) else None
+            ),
+            "n_ge_real_outlier_to_below_screening_threshold": (
+                int((shuffled_reclass >= n_strict_reclassified_primary).sum())
+                if len(shuffled_reclass.dropna())
+                else None
+            ),
+        },
         "n_oof_outliers": int(summary["REMAINS_OOF_OUTLIER"].sum()),
         "n_new_oof_outliers_not_in_strict_screening": n_new_oof_outliers,
+        "n_primary_non_strict_sources": int(len(primary_non_strict)),
         "n_candidate_epoch_bundle_rows": int(len(bundle)),
+        "n_bundle_sources": int(bundle["GROUP_ID"].nunique()),
         "n_cadence_matched_inspection_control_sources": int(len(inspection_control_ids)),
         "n_injection_recovery_base_population_sources": int(len(injection_base_ids)),
+        "n_control_sources_in_both_inspection_and_injection": int(len(inspection_and_injection_overlap)),
         "source_summary_oof": str(source_path),
         "candidate_epoch_bundle": str(bundle_path),
         "strict_candidate_transition_table_csv": str(transition_path),
+        "primary_cohort_transition_table_csv": str(primary_transition_path),
+        "threshold_sensitivity_csv": str(threshold_sensitivity_path),
+        "metric_shift_summary_csv": str(metric_shift_summary_path),
+        "candidate_shuffle_transition_null_csv": str(shuffled_null_path),
     }
     manifest["output_files"] = {
         "source_summary_oof": _file_record(source_path),
         "candidate_epoch_bundle": _file_record(bundle_path),
         "strict_candidate_transition_table": _file_record(transition_path),
+        "primary_cohort_transition_table": _file_record(primary_transition_path),
+        "threshold_sensitivity": _file_record(threshold_sensitivity_path),
+        "metric_shift_summary": _file_record(metric_shift_summary_path),
+        "candidate_shuffle_transition_null": _file_record(shuffled_null_path),
     }
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    if public_report_dir is not None:
+        public_dir = Path(public_report_dir)
+        public_dir.mkdir(parents=True, exist_ok=True)
+        transition.to_csv(public_dir / "strict_candidate_transition_table.csv", index=False)
+        primary_transition.to_csv(public_dir / "primary_cohort_transition_table.csv", index=False)
+        threshold_sensitivity.to_csv(public_dir / "threshold_sensitivity.csv", index=False)
+        metric_shift_summary.to_csv(public_dir / "metric_shift_summary.csv", index=False)
+        shuffled_null.to_csv(public_dir / "candidate_shuffle_transition_null.csv", index=False)
+        (public_dir / "build_manifest_public.json").write_text(
+            json.dumps(_public_manifest(manifest), indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
     return BundleBuildResult(summary, bundle, manifest)
 
 
@@ -852,8 +1261,15 @@ def _bundle_columns(frame: pd.DataFrame) -> list[str]:
         "MJD",
         "NIGHT",
         "EXPID",
+        "EXPTIME",
         "SURVEY",
         "PROGRAM",
+        "TARGET_RA",
+        "TARGET_DEC",
+        "GAIA_PHOT_G_MEAN_MAG",
+        "PARALLAX",
+        "RADIAL_VELOCITY",
+        "RADIAL_VELOCITY_ERROR",
         "VRAD",
         "VRAD_ERR",
         "VRAD_OFFSET",
