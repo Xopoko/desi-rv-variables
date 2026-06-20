@@ -176,14 +176,14 @@
   "repositories": {
     "desi_rv_audit_artifact_commit": "6b3c116cd77cc0254c9f26fd0e98fdebdaa4807b",
     "desi_rv_audit_artifact_dirty": false,
-    "desi_rv_variables_commit": "f32f08cfbd87e4242b159c65f0d0cee3f22ca5d4",
+    "desi_rv_variables_commit": "856e95104537ef646f9c2588c2158ac247c5acbd",
     "desi_rv_variables_dirty": false
   },
   "runtime": {
     "packages": {
       "astropy": "8.0.0",
       "desi-rv-audit": "0.2.1",
-      "desi-rv-variables": "0.1.2",
+      "desi-rv-variables": "0.1.3",
       "numpy": "2.4.6",
       "pandas": "2.3.3",
       "pyarrow": "24.0.0",

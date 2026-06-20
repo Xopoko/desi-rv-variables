@@ -10,9 +10,9 @@ rank source IDs.
 
 ## Local Run
 
-Runtime: 157.81 s
+Runtime: 157.07 s
 
-Maximum resident set size: 15.78 GB
+Maximum resident set size: 15.74 GB
 
 Swaps: 0
 
