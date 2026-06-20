@@ -72,9 +72,13 @@ def _sha256(path: str | Path) -> str:
     return digest.hexdigest()
 
 
+def _path_text(path: str | Path) -> str:
+    return Path(path).as_posix()
+
+
 def _file_record(path: str | Path) -> dict[str, object]:
     path = Path(path)
-    return {"path": str(path), "size": path.stat().st_size, "sha256": _sha256(path)}
+    return {"path": _path_text(path), "size": path.stat().st_size, "sha256": _sha256(path)}
 
 
 def _validate_sha256(path: str | Path, expected_sha256: str, label: str) -> None:
@@ -1218,13 +1222,13 @@ def build_bundles(
         "n_cadence_matched_inspection_control_sources": int(len(inspection_control_ids)),
         "n_injection_recovery_base_population_sources": int(len(injection_base_ids)),
         "n_control_sources_in_both_inspection_and_injection": int(len(inspection_and_injection_overlap)),
-        "source_summary_oof": str(source_path),
-        "candidate_epoch_bundle": str(bundle_path),
-        "strict_candidate_transition_table_csv": str(transition_path),
-        "primary_cohort_transition_table_csv": str(primary_transition_path),
-        "threshold_sensitivity_csv": str(threshold_sensitivity_path),
-        "metric_shift_summary_csv": str(metric_shift_summary_path),
-        "candidate_shuffle_transition_null_csv": str(shuffled_null_path),
+        "source_summary_oof": _path_text(source_path),
+        "candidate_epoch_bundle": _path_text(bundle_path),
+        "strict_candidate_transition_table_csv": _path_text(transition_path),
+        "primary_cohort_transition_table_csv": _path_text(primary_transition_path),
+        "threshold_sensitivity_csv": _path_text(threshold_sensitivity_path),
+        "metric_shift_summary_csv": _path_text(metric_shift_summary_path),
+        "candidate_shuffle_transition_null_csv": _path_text(shuffled_null_path),
     }
     manifest["output_files"] = {
         "source_summary_oof": _file_record(source_path),

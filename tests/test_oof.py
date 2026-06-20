@@ -3,6 +3,7 @@ import pandas as pd
 
 from desi_rv_variables.oof import (
     _cadence_matched_inspection_control_ids,
+    _file_record,
     _sha256,
     apply_oof_program_night_offsets,
     candidate_shuffle_transition_null,
@@ -74,6 +75,17 @@ def test_sha256_helper_detects_input_drift(tmp_path):
     path = tmp_path / "input.txt"
     path.write_text("abc", encoding="utf-8")
     assert _sha256(path) == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+
+
+def test_file_record_uses_portable_posix_path_text(tmp_path):
+    path = tmp_path / "nested" / "input.txt"
+    path.parent.mkdir()
+    path.write_text("abc", encoding="utf-8")
+
+    record = _file_record(path)
+
+    assert record["path"].endswith("/nested/input.txt")
+    assert "\\" not in record["path"]
 
 
 def test_oof_offset_is_subtracted_for_matching_fold_label():

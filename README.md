@@ -63,9 +63,18 @@ export DESI_RV_AUDIT_ARTIFACT_DIR=/path/to/desi-rv-audit/reports/program_night_a
 export DESI_RV_STRICT_CANDIDATES=/path/to/candidate_sources_strict.csv
 ```
 
+PowerShell uses the same variable names:
+
+```powershell
+$env:DESI_RV_AUDIT_DATA_DIR = "C:\path\to\desi-rv-audit\data"
+$env:DESI_RV_AUDIT_ARTIFACT_DIR = "C:\path\to\desi-rv-audit\reports\program_night_artifacts"
+$env:DESI_RV_STRICT_CANDIDATES = "C:\path\to\candidate_sources_strict.csv"
+```
+
 If `DESI_RV_STRICT_CANDIDATES` is not set, `scripts/build_local_bundles.sh`
-downloads `candidate_sources_strict.csv.gz` from this repository's `v0.1.3`
-release and verifies its SHA-256 checksum before building local artifacts.
+and `scripts/build_local_bundles.ps1` download `candidate_sources_strict.csv.gz`
+from this repository's `v0.1.3` release and verify its SHA-256 checksum before
+building local artifacts.
 
 The DESI DR1 stellar VAC reports 10,012,925 single-epoch spectra with stellar
 parameters and radial velocities and 1,718,305 Gaia sources with more than one
@@ -74,12 +83,49 @@ https://data.desi.lbl.gov/doc/releases/dr1/vac/mws/
 
 ## Build Local Bundles
 
+The portable entry point is the Python CLI. It works the same way on Windows,
+macOS, and Linux:
+
+```bash
+python -m desi_rv_variables.cli build-local-bundles
+```
+
+By default it expects the sibling audit checkout layout:
+
+```text
+parent/
+  desi-rv-audit/
+    data/desi_main/rvpix_exp-main-backup.fits
+    data/desi_main/rvpix_exp-main-bright.fits
+    data/desi_main/rvpix_exp-main-dark.fits
+    data/desi_corrections/backup_correction.fits
+    reports/program_night_artifacts/diagnostic_offsets_program_night.csv
+  desi-rv-variables/
+```
+
+Windows PowerShell:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e ".[dev]"
+.\scripts\build_local_bundles.ps1
+```
+
+macOS/Linux:
+
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
+python -m pip install -e ".[dev]"
 
-scripts/build_local_bundles.sh
+./scripts/build_local_bundles.sh
+```
+
+To only download and validate the frozen strict candidate input:
+
+```bash
+python -m desi_rv_variables.cli download-strict-candidates
 ```
 
 Outputs:
