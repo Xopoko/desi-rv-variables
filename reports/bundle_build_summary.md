@@ -10,9 +10,9 @@ rank source IDs.
 
 ## Local Run
 
-Runtime: 168.46 s
+Runtime: 157.81 s
 
-Maximum resident set size: 13.58 GB
+Maximum resident set size: 15.78 GB
 
 Swaps: 0
 
@@ -24,7 +24,7 @@ candidate list, plus 20 candidate-level shuffled-offset controls.
 
 ```text
 artifacts/source_summary_oof.parquet                 318,834 rows, 53 MB
-artifacts/candidate_epoch_bundle.parquet              89,180 rows, 21 MB
+artifacts/candidate_epoch_bundle.parquet              89,180 rows, 23 MB
 artifacts/strict_candidate_transition_table.csv            4 rows, 155 B
 artifacts/primary_cohort_transition_table.csv              5 rows, 233 B
 artifacts/candidate_shuffle_transition_null.csv           20 rows, 962 B
