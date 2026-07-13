@@ -3,12 +3,14 @@ from __future__ import annotations
 import gzip
 import os
 import shutil
+import time
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
 from .oof import (
     DEFAULT_BACKUP_CORRECTION_MD5,
+    EXPECTED_AUDIT_MODEL_SHA256_BY_NAME,
     STRICT_CANDIDATES_GZ_SHA256,
     STRICT_CANDIDATES_SHA256,
     _sha256,
@@ -18,8 +20,16 @@ from .oof import (
 
 DEFAULT_STRICT_CANDIDATES_URL = (
     "https://github.com/Xopoko/desi-rv-variables/releases/download/"
-    "v0.1.3/candidate_sources_strict.csv.gz"
+    "v0.2.0/candidate_sources_strict.csv.gz"
 )
+DEFAULT_AUDIT_MODEL_ASSET_BASE_URL = (
+    "https://github.com/Xopoko/desi-rv-audit/releases/download/v0.3.0"
+)
+EXPECTED_AUDIT_MODEL_GZIP_SHA256_BY_NAME = {
+    "program_night_permutation_offsets.csv": "38bb2f2d3905482591b7638717a498da80a14c3408c4b15d23f0e36dd71db13d",
+    "program_night_permutation_exposure_map.csv": "80bade3799731beaa82902a92efe35113d625613939a7bb067794b370c7c9663",
+    "program_night_bootstrap_offsets.csv": "72544b6d11dbc9edd7cfa76173f61f5692199a669f4a7b3d437d64ce8874a12d",
+}
 
 
 @dataclass(frozen=True)
@@ -68,12 +78,23 @@ def resolve_local_build_paths(
     )
 
 
-def _download(url: str, target: Path) -> None:
+def _download(url: str, target: Path, attempts: int = 3) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     temp = target.with_name(target.name + ".tmp")
-    with urllib.request.urlopen(url) as response, temp.open("wb") as handle:
-        shutil.copyfileobj(response, handle)
-    temp.replace(target)
+    request = urllib.request.Request(url, headers={"User-Agent": "desi-rv-variables"})
+    for attempt in range(1, attempts + 1):
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response, temp.open(
+                "wb"
+            ) as handle:
+                shutil.copyfileobj(response, handle)
+            temp.replace(target)
+            return
+        except Exception:
+            temp.unlink(missing_ok=True)
+            if attempt == attempts:
+                raise
+            time.sleep(float(attempt))
 
 
 def ensure_strict_candidates(
@@ -117,6 +138,51 @@ def ensure_strict_candidates(
     return target
 
 
+def ensure_audit_model_artifacts(
+    artifact_dir: str | Path,
+    base_url: str = DEFAULT_AUDIT_MODEL_ASSET_BASE_URL,
+    expected_sha256_by_name: dict[str, str] = EXPECTED_AUDIT_MODEL_SHA256_BY_NAME,
+    expected_gzip_sha256_by_name: dict[str, str] = EXPECTED_AUDIT_MODEL_GZIP_SHA256_BY_NAME,
+    force: bool = False,
+) -> list[Path]:
+    artifact_dir = Path(artifact_dir).expanduser()
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    results: list[Path] = []
+    for name, expected_gzip_sha256 in expected_gzip_sha256_by_name.items():
+        expected_sha256 = expected_sha256_by_name[name]
+        target = artifact_dir / name
+        if target.exists() and not force:
+            actual = _sha256(target)
+            if actual != expected_sha256:
+                raise ValueError(
+                    f"audit model SHA-256 mismatch for {target}: "
+                    f"expected {expected_sha256}, got {actual}"
+                )
+            results.append(target)
+            continue
+
+        gzip_path = artifact_dir / f"{name}.gz"
+        _download(f"{base_url.rstrip('/')}/{name}.gz", gzip_path)
+        actual_gzip = _sha256(gzip_path)
+        if actual_gzip != expected_gzip_sha256:
+            raise ValueError(
+                f"audit model gzip SHA-256 mismatch for {gzip_path}: "
+                f"expected {expected_gzip_sha256}, got {actual_gzip}"
+            )
+        temp = target.with_name(target.name + ".tmp")
+        with gzip.open(gzip_path, "rb") as source, temp.open("wb") as destination:
+            shutil.copyfileobj(source, destination)
+        temp.replace(target)
+        actual = _sha256(target)
+        if actual != expected_sha256:
+            raise ValueError(
+                f"audit model SHA-256 mismatch for {target}: "
+                f"expected {expected_sha256}, got {actual}"
+            )
+        results.append(target)
+    return results
+
+
 def build_local_bundles(
     project_root: str | Path | None = None,
     audit_data_dir: str | Path | None = None,
@@ -129,14 +195,17 @@ def build_local_bundles(
     n_folds: int = 5,
     control_ratio: float = 1.0,
     injection_base_ratio: float = 1.0,
-    n_candidate_shuffles: int = 20,
+    n_candidate_shuffles: int = 0,
     candidate_shuffle_seed: int = 20260620,
+    injection_trials_per_cell: int = 1000,
+    injection_seed: int = 20260713,
     backup_correction_md5: str = DEFAULT_BACKUP_CORRECTION_MD5,
     strict_candidates_sha256: str = STRICT_CANDIDATES_SHA256,
     strict_candidates_gz_sha256: str = STRICT_CANDIDATES_GZ_SHA256,
     check_frozen_input_hashes: bool = True,
     check_offsets_git_commit: bool = True,
     force_strict_candidates_download: bool = False,
+    force_audit_model_download: bool = False,
 ):
     paths = resolve_local_build_paths(
         project_root=project_root,
@@ -157,6 +226,11 @@ def build_local_bundles(
         expected_gz_sha256=strict_candidates_gz_sha256,
         force=force_strict_candidates_download,
     )
+    if check_frozen_input_hashes:
+        ensure_audit_model_artifacts(
+            paths.audit_artifact_dir,
+            force=force_audit_model_download,
+        )
     fits_paths = [
         paths.audit_data_dir / "desi_main" / "rvpix_exp-main-backup.fits",
         paths.audit_data_dir / "desi_main" / "rvpix_exp-main-bright.fits",
@@ -168,6 +242,12 @@ def build_local_bundles(
         / "desi_corrections"
         / "backup_correction.fits",
         offsets_path=paths.audit_artifact_dir / "diagnostic_offsets_program_night.csv",
+        permutation_offsets_path=paths.audit_artifact_dir
+        / "program_night_permutation_offsets.csv",
+        permutation_exposure_map_path=paths.audit_artifact_dir
+        / "program_night_permutation_exposure_map.csv",
+        bootstrap_offsets_path=paths.audit_artifact_dir
+        / "program_night_bootstrap_offsets.csv",
         strict_candidates_path=strict_path,
         output_dir=paths.output_dir,
         public_report_dir=paths.public_report_dir,
@@ -177,6 +257,8 @@ def build_local_bundles(
         injection_base_ratio=injection_base_ratio,
         n_candidate_shuffles=n_candidate_shuffles,
         candidate_shuffle_seed=candidate_shuffle_seed,
+        injection_trials_per_cell=injection_trials_per_cell,
+        injection_seed=injection_seed,
         backup_correction_md5=backup_correction_md5,
         strict_candidates_sha256=strict_candidates_sha256,
         check_frozen_input_hashes=check_frozen_input_hashes,

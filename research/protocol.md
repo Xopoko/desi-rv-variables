@@ -42,11 +42,14 @@ new_oof_outlier_fraction
 This avoids attributing unscorable sources or rule-reconciliation differences
 to a calibration effect.
 
-A candidate-level shuffled-offset control repeats source-level scoring after
-randomly permuting `PROGRAM:NIGHT` offsets within each `FOLD x PROGRAM` block
-while preserving label coverage and connected-component membership. This
-produces a null distribution for `OUTLIER -> BELOW_SCREENING_THRESHOLD`
-transitions among the frozen candidates.
+A candidate-level full-pipeline permutation control starts from the audit's
+exposure-level shuffled-night assignment, refits every fold-specific offset
+model, applies that realization to the same physical candidate epochs, and
+repeats source-level scoring. One exposure receives one shuffled night in every
+pair where it appears. This produces the declared null distribution for
+`OUTLIER -> BELOW_SCREENING_THRESHOLD` transitions among the frozen candidates.
+The older within-table offset shuffle is retained only as a heuristic diagnostic
+and is not used as primary evidence.
 
 The primary outcome is reported overall and, where sample sizes support it, by:
 
@@ -66,13 +69,14 @@ The first MAIN run uses:
 - `rvpix_exp-main-bright.fits`;
 - `rvpix_exp-main-dark.fits`;
 - published DESI DR1 backup correction `backup_correction.fits`;
-- diagnostic `PROGRAM:NIGHT` fold offsets from `desi-rv-audit` v0.2.1;
+- diagnostic `PROGRAM:NIGHT` fold offsets, full-pipeline permutation models,
+  exposure maps, and source-bootstrap models from `desi-rv-audit` v0.3.0;
 - frozen strict screening list from the audit run.
 
 The frozen build validates SHA-256 values for the three DESI FITS inputs, the
-published backup correction, the diagnostic offset table, and the strict
-candidate list. It also validates the runtime fold fixture before applying
-out-of-fold offsets.
+published backup correction, every diagnostic offset-model input, and the
+strict candidate list. It also validates the runtime fold fixture before
+applying out-of-fold offsets.
 
 No source ID is inspected before this protocol and the first bundle builder are
 committed.
@@ -114,11 +118,12 @@ This keeps the first selection conservative. Future analyses may re-estimate
 post-correction floors on training folds, but that must be a separate protocol
 amendment.
 
-The uncertainty of the estimated `PROGRAM:NIGHT` offset is not added to
-`VRAD_ERROR_CALIBRATED`. Therefore `p_const_oof` is a comparative screening
-statistic. It is not a fully calibrated probability and should not be used as a
-false-discovery-rate estimate without bootstrap or covariance modelling of the
-offsets.
+The uncertainty of the estimated `PROGRAM:NIGHT` offset is not added as an
+independent term to `VRAD_ERROR_CALIBRATED`, because epochs sharing a label have
+correlated correction uncertainty. Source-bootstrap offset realizations are
+instead propagated through the complete source-level score. Therefore
+`p_const_oof` remains a comparative screening statistic rather than a calibrated
+false-discovery probability.
 
 ## Source-Level Models
 
@@ -164,15 +169,18 @@ This is a screening definition only.
 
 ## Threshold Selection
 
-Gold-sample thresholds must come from injection-recovery simulations:
+Any future catalogue threshold must come from injection-recovery simulations:
 
 - null simulations with real cadence, S/N, programs, and errors;
 - sinusoidal or Keplerian injections over amplitude, period, eccentricity, and
   phase;
 - residual calibration perturbations drawn from train-fold diagnostics.
 
-Numeric thresholds for a high-confidence catalogue are not selected from real
-candidates.
+The current simulator replaces observed velocities with synthetic null or
+Keplerian draws on real cadence/error templates. It reports Gaussian and
+heavy-tailed noise sensitivities, but it does not by itself establish an
+astrophysical prevalence or a catalogue FDR. Numeric thresholds for a final
+catalogue are not selected from real candidates.
 
 The cadence-matched inspection-control sample in the first bundle is
 outcome-conditioned and is intended for dossier comparison only. The separate
@@ -193,6 +201,10 @@ Before any source is described as a high-confidence DESI RV-variable candidate:
 5. The underlying DESI spectrum/model must be inspected.
 6. Gaia grouping must be checked for possible source-association failure.
 7. External catalogues must be checked before claiming novelty.
+
+The automated `ROBUST_DIAGNOSTIC_SUBSET` is only a triage subset satisfying
+bootstrap, leave-one-out, disjoint-pair, and within-program checks. Its name is
+deliberately not `gold` or `high-confidence`, and it is not a catalogue claim.
 
 ## External Crossmatches
 

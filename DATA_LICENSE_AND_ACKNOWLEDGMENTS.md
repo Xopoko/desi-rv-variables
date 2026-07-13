@@ -23,6 +23,9 @@ Transformations applied by this repository include:
 - applying source-disjoint diagnostic `PROGRAM:NIGHT` offsets from
   `desi-rv-audit`;
 - rebuilding source-level constant-RV screening metrics;
+- propagating source-bootstrap offset models through source-level scores;
+- running synthetic null and Keplerian injection-recovery experiments on
+  transformed cadence and uncertainty templates;
 - selecting deterministic cadence-matched inspection controls and an
   injection-recovery base-population epoch bundle.
 

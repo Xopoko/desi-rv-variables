@@ -4,6 +4,7 @@ from pathlib import Path
 
 from desi_rv_variables.local_build import (
     build_local_bundles,
+    ensure_audit_model_artifacts,
     ensure_strict_candidates,
     resolve_local_build_paths,
 )
@@ -41,6 +42,25 @@ def test_ensure_strict_candidates_downloads_decompresses_and_validates(tmp_path)
 
     assert result == target
     assert target.read_bytes() == csv_payload
+
+
+def test_ensure_audit_model_artifacts_downloads_and_validates(tmp_path):
+    source_dir = tmp_path / "release"
+    source_dir.mkdir()
+    payload = b"FOLD,LABEL,OFFSET_KMS,COMPONENT\n0,BRIGHT:A,0.1,0\n"
+    name = "program_night_bootstrap_offsets.csv"
+    gzip_path = source_dir / f"{name}.gz"
+    _write_gzip(gzip_path, payload)
+
+    results = ensure_audit_model_artifacts(
+        tmp_path / "artifacts",
+        base_url=source_dir.as_uri(),
+        expected_sha256_by_name={name: _sha256_bytes(payload)},
+        expected_gzip_sha256_by_name={name: _sha256_file(gzip_path)},
+    )
+
+    assert len(results) == 1
+    assert results[0].read_bytes() == payload
 
 
 def test_resolve_local_build_paths_uses_env_defaults(tmp_path, monkeypatch):
@@ -83,6 +103,12 @@ def test_build_local_bundles_ensures_candidates_and_calls_core_builder(tmp_path,
         "placeholder",
         encoding="utf-8",
     )
+    for name in (
+        "program_night_permutation_offsets.csv",
+        "program_night_permutation_exposure_map.csv",
+        "program_night_bootstrap_offsets.csv",
+    ):
+        (audit_artifact_dir / name).write_text("placeholder", encoding="utf-8")
 
     csv_payload = b"GROUP_ID\n101\n"
     gz_path = tmp_path / "candidate_sources_strict.csv.gz"
@@ -103,6 +129,7 @@ def test_build_local_bundles_ensures_candidates_and_calls_core_builder(tmp_path,
         strict_candidates_sha256=_sha256_bytes(csv_payload),
         strict_candidates_gz_sha256=_sha256_file(gz_path),
         n_candidate_shuffles=2,
+        check_frozen_input_hashes=False,
     )
 
     strict_candidates = project_root / "artifacts" / "inputs" / "candidate_sources_strict.csv"
@@ -117,6 +144,15 @@ def test_build_local_bundles_ensures_candidates_and_calls_core_builder(tmp_path,
         audit_data_dir / "desi_corrections" / "backup_correction.fits"
     )
     assert captured["offsets_path"] == audit_artifact_dir / "diagnostic_offsets_program_night.csv"
+    assert captured["permutation_offsets_path"] == (
+        audit_artifact_dir / "program_night_permutation_offsets.csv"
+    )
+    assert captured["permutation_exposure_map_path"] == (
+        audit_artifact_dir / "program_night_permutation_exposure_map.csv"
+    )
+    assert captured["bootstrap_offsets_path"] == (
+        audit_artifact_dir / "program_night_bootstrap_offsets.csv"
+    )
     assert captured["strict_candidates_path"] == strict_candidates
     assert captured["output_dir"] == project_root / "artifacts"
     assert captured["public_report_dir"] == project_root / "reports"

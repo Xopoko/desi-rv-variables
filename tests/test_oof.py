@@ -1,12 +1,16 @@
 import numpy as np
 import pandas as pd
+import pytest
 
 from desi_rv_variables.oof import (
+    build_bundles,
     _cadence_matched_inspection_control_ids,
     _file_record,
     _sha256,
     apply_oof_program_night_offsets,
-    candidate_shuffle_transition_null,
+    heuristic_offset_shuffle_null,
+    candidate_bootstrap_stability,
+    candidate_full_pipeline_permutation_null,
     fold_fixture,
     load_program_night_offsets,
     program_night_labels,
@@ -16,6 +20,21 @@ from desi_rv_variables.oof import (
     validate_fold_fixture,
     validate_parameters,
 )
+
+
+def test_frozen_build_requires_complete_inference_ensemble(tmp_path):
+    strict = tmp_path / "strict.csv"
+    strict.write_text("GROUP_ID\n1\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="requires all inference ensembles"):
+        build_bundles(
+            fits_paths=[],
+            backup_correction_path=tmp_path / "correction.fits",
+            offsets_path=tmp_path / "offsets.csv",
+            strict_candidates_path=strict,
+            output_dir=tmp_path / "outputs",
+            check_frozen_input_hashes=True,
+        )
 
 
 def test_program_night_label_matches_audit_shape():
@@ -28,13 +47,13 @@ def test_program_night_label_matches_audit_shape():
 
 def test_fold_fixture_matches_pinned_hashing():
     group_ids = pd.Series([1, 101, 202, 303, 123456789012345678, -55], dtype="int64")
-    assert source_fold_ids(group_ids, n_folds=5).tolist() == [1, 4, 3, 0, 0, 4]
+    assert source_fold_ids(group_ids, n_folds=5).tolist() == [4, 4, 1, 4, 2, 4]
     assert fold_fixture(n_folds=5) == [
-        {"group_id": 1, "fold": 1},
+        {"group_id": 1, "fold": 4},
         {"group_id": 101, "fold": 4},
-        {"group_id": 202, "fold": 3},
-        {"group_id": 303, "fold": 0},
-        {"group_id": 123456789012345678, "fold": 0},
+        {"group_id": 202, "fold": 1},
+        {"group_id": 303, "fold": 4},
+        {"group_id": 123456789012345678, "fold": 2},
         {"group_id": -55, "fold": 4},
     ]
     validate_fold_fixture(n_folds=5)
@@ -240,7 +259,7 @@ def test_candidate_shuffle_null_preserves_candidate_level_scoring_shape():
             "COMPONENT": [0, 0, 0],
         }
     )
-    shuffled = candidate_shuffle_transition_null(
+    shuffled = heuristic_offset_shuffle_null(
         frame=frame,
         offsets=offsets,
         candidate_ids={1},
@@ -250,3 +269,103 @@ def test_candidate_shuffle_null_preserves_candidate_level_scoring_shape():
     )
     assert shuffled["SHUFFLE_ID"].tolist() == [0, 1]
     assert set(shuffled.columns) >= {"N_OUTLIER_TO_BELOW_SCREENING_THRESHOLD"}
+
+
+def test_full_pipeline_permutation_uses_exposure_assignment():
+    frame = pd.DataFrame(
+        {
+            "GROUP_ID": [1, 1, 1],
+            "GROUP_KIND": ["GAIA_SOURCE_ID"] * 3,
+            "SOURCE_ID": [10, 10, 10],
+            "TARGETID": [100, 100, 100],
+            "MJD": [1.0, 5.0, 10.0],
+            "NIGHT": [20210101, 20210105, 20210110],
+            "EXPID": [11, 12, 13],
+            "SURVEY": ["MAIN"] * 3,
+            "PROGRAM": ["BRIGHT"] * 3,
+            "GOOD_EPOCH": [True, True, True],
+            "VRAD_ADOPTED": [0.0, 20.0, 0.0],
+            "VRAD_ERR_ADOPTED": [1.0, 1.0, 1.0],
+            "SN_R": [20.0, 21.0, 19.0],
+            "TEFF": [5500.0] * 3,
+            "LOGG": [4.3] * 3,
+            "FEH": [-1.0] * 3,
+        }
+    )
+    fold = int(source_fold_ids(pd.Series([1]), 5).iloc[0])
+    offsets = pd.DataFrame(
+        {
+            "PERMUTATION": [0, 0, 0],
+            "FOLD": [fold] * 3,
+            "LABEL": ["BRIGHT:A", "BRIGHT:B", "BRIGHT:C"],
+            "OFFSET_KMS": [0.0, 20.0, 0.0],
+            "COMPONENT": [0, 0, 0],
+        }
+    )
+    exposure_map = pd.DataFrame(
+        {
+            "PERMUTATION": [0, 0, 0],
+            "EXPOSURE_KEY": ["MAIN|BRIGHT|11", "MAIN|BRIGHT|12", "MAIN|BRIGHT|13"],
+            "SHUFFLED_NIGHT": ["A", "B", "C"],
+        }
+    )
+
+    result = candidate_full_pipeline_permutation_null(
+        frame,
+        offsets,
+        exposure_map,
+        pd.DataFrame(
+            {
+                "GROUP_ID": [1],
+                "PRIMARY_COHORT": [True],
+                "CLASSIFICATION_BEFORE": ["CONSTANT_RV_OUTLIER"],
+            }
+        ),
+        {1},
+        n_folds=5,
+    )
+
+    assert result["N_BEFORE_OUTLIER_PRIMARY"].tolist() == [1]
+    assert result["N_OUTLIER_TO_BELOW_SCREENING_THRESHOLD"].tolist() == [1]
+    assert result["EXPOSURE_MAP_COVERAGE_FRACTION"].tolist() == [1.0]
+
+
+def test_bootstrap_stability_reports_outlier_survival():
+    frame = pd.DataFrame(
+        {
+            "GROUP_ID": [1, 1, 1],
+            "GROUP_KIND": ["GAIA_SOURCE_ID"] * 3,
+            "SOURCE_ID": [10, 10, 10],
+            "TARGETID": [100, 100, 100],
+            "MJD": [1.0, 5.0, 10.0],
+            "NIGHT": [20210101, 20210105, 20210110],
+            "PROGRAM": ["BRIGHT"] * 3,
+            "GOOD_EPOCH": [True, True, True],
+            "VRAD_ADOPTED": [0.0, 20.0, 0.0],
+            "VRAD_ERR_ADOPTED": [1.0, 1.0, 1.0],
+            "SN_R": [20.0, 21.0, 19.0],
+            "TEFF": [5500.0] * 3,
+            "LOGG": [4.3] * 3,
+            "FEH": [-1.0] * 3,
+        }
+    )
+    fold = int(source_fold_ids(pd.Series([1]), 5).iloc[0])
+    offsets = pd.DataFrame(
+        [
+            {
+                "BOOTSTRAP": bootstrap,
+                "FOLD": fold,
+                "LABEL": f"BRIGHT:{night}",
+                "OFFSET_KMS": 0.0,
+                "COMPONENT": 0,
+            }
+            for bootstrap in (0, 1)
+            for night in (20210101, 20210105, 20210110)
+        ]
+    )
+
+    result = candidate_bootstrap_stability(frame, offsets, {1}, n_folds=5)
+
+    assert result["N_BOOTSTRAPS_SCORABLE"].tolist() == [2]
+    assert result["OOF_OUTLIER_BOOTSTRAP_FRACTION"].tolist() == [1.0]
+    assert result["BOOTSTRAP_ROBUST_95"].tolist() == [True]

@@ -1,0 +1,19 @@
+astropy==8.0.0
+astropy-iers-data==0.2026.6.15.15.33.16
+desi-rv-audit @ git+https://github.com/Xopoko/desi-rv-audit.git@8fc6ba766a10fee9aeaf3d04e1c28b8e6ed4c89c
+iniconfig==2.3.0
+numpy==2.4.6
+packaging==26.2
+pandas==2.3.3
+pluggy==1.6.0
+pyarrow==24.0.0
+pyerfa==2.0.1.5
+Pygments==2.20.0
+pytest==9.1.1
+python-dateutil==2.9.0.post0
+pytz==2026.2
+PyYAML==6.0.3
+scipy==1.18.0
+six==1.17.0
+tabulate==0.10.0
+tzdata==2026.2

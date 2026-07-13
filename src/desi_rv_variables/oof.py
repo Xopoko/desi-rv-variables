@@ -13,15 +13,25 @@ import pandas as pd
 from scipy.stats import chi2
 
 from desi_rv_audit.corrections import apply_velocity_calibration
+from desi_rv_audit.hashing import FOLD_HASH_ALGORITHM, stable_hash64, stable_hash_mod
 from desi_rv_audit.io import load_many
 from desi_rv_audit.quality import QualityRules, quality_mask
+
+from .robustness import candidate_robustness_table
+from .reporting import write_bundle_build_summary
+from .simulation import bootstrap_offset_uncertainty, run_injection_recovery
 
 
 DEFAULT_BACKUP_CORRECTION_MD5 = "f48a4b21b541e94d61f4372f4c555f12"
 STRICT_CANDIDATES_SHA256 = "5c96d5cc823725f9c80f133c11f0aad3ca09c7eaa678a5d694b095eb46944b47"
 STRICT_CANDIDATES_GZ_SHA256 = "7958ac85c59e5228069710f44420483373e7fddef58f2fb0aa4b5b8b06aed2e3"
-EXPECTED_PROGRAM_NIGHT_OFFSETS_SHA256 = "d3d1de75f2140cc77cd64bccaf944e4e76b4b2971d82a2f32e66ee2c024e9a30"
-EXPECTED_DESI_RV_AUDIT_ARTIFACT_COMMIT = "6b3c116cd77cc0254c9f26fd0e98fdebdaa4807b"
+EXPECTED_AUDIT_MODEL_SHA256_BY_NAME = {
+    "diagnostic_offsets_program_night.csv": "8c8e4c5bb787c7534c2c4a2a2b0b1c2b77810475e25b6ec2f533889d23eb0926",
+    "program_night_permutation_offsets.csv": "910aed945056010bac4b424697fe8dc9b1fff195108736bdad852442d6c1fb44",
+    "program_night_permutation_exposure_map.csv": "dc99e2457e0aa73db167aaa07c57a0862c5748b1ba1417b4554af975c7a52d08",
+    "program_night_bootstrap_offsets.csv": "744bdd5433d93695949678346dfe596456edfb4493befbcd60d095fe3045aa47",
+}
+EXPECTED_DESI_RV_AUDIT_ARTIFACT_COMMIT = "fcc7e2e3e83df4ff851050d81bd3d9b2e715312b"
 EXPECTED_BACKUP_CORRECTION_SHA256 = "eb4da91267db39f285a277989489f991ea48371336efedd28bd07d2b58e4a400"
 EXPECTED_FITS_SHA256_BY_NAME = {
     "rvpix_exp-main-backup.fits": "8124fdf11983676eb8ed9e8a298dd9b12e74e066a1e77e9170360c0e58be8669",
@@ -29,11 +39,11 @@ EXPECTED_FITS_SHA256_BY_NAME = {
     "rvpix_exp-main-dark.fits": "5b6eeaed1f6bffb287f533cc6b171c7843d3df9cca6ab53b8415b6b43108943b",
 }
 EXPECTED_FOLD_FIXTURE = [
-    {"group_id": 1, "fold": 1},
+    {"group_id": 1, "fold": 4},
     {"group_id": 101, "fold": 4},
-    {"group_id": 202, "fold": 3},
-    {"group_id": 303, "fold": 0},
-    {"group_id": 123456789012345678, "fold": 0},
+    {"group_id": 202, "fold": 1},
+    {"group_id": 303, "fold": 4},
+    {"group_id": 123456789012345678, "fold": 2},
     {"group_id": -55, "fold": 4},
 ]
 
@@ -51,6 +61,7 @@ def validate_parameters(
     control_ratio: float,
     injection_base_ratio: float,
     n_candidate_shuffles: int = 0,
+    injection_trials_per_cell: int = 1,
 ) -> None:
     if n_folds < 2:
         raise ValueError("n_folds must be at least 2")
@@ -62,6 +73,8 @@ def validate_parameters(
         raise ValueError("injection_base_ratio must be non-negative")
     if n_candidate_shuffles < 0:
         raise ValueError("n_candidate_shuffles must be non-negative")
+    if injection_trials_per_cell < 1:
+        raise ValueError("injection_trials_per_cell must be positive")
 
 
 def _sha256(path: str | Path) -> str:
@@ -138,10 +151,7 @@ def _package_versions() -> dict[str, str]:
 
 
 def source_fold_ids(group_ids: pd.Series, n_folds: int = 5) -> pd.Series:
-    hashed = pd.util.hash_pandas_object(group_ids.astype("string"), index=False).to_numpy(
-        dtype=np.uint64
-    )
-    return pd.Series((hashed % np.uint64(n_folds)).astype(np.int64), index=group_ids.index)
+    return pd.Series(stable_hash_mod(group_ids, n_folds), index=group_ids.index)
 
 
 def fold_fixture(n_folds: int = 5) -> list[dict[str, int]]:
@@ -158,7 +168,7 @@ def validate_fold_fixture(n_folds: int = 5) -> None:
     actual = fold_fixture(n_folds=n_folds)
     if actual != EXPECTED_FOLD_FIXTURE:
         raise RuntimeError(
-            "Fold fixture mismatch. pandas hashing behavior changed or the fold algorithm drifted."
+            f"Fold fixture mismatch for {FOLD_HASH_ALGORITHM}."
         )
 
 
@@ -166,6 +176,9 @@ def validate_frozen_inputs(
     fits_paths: list[Path],
     backup_correction_path: Path,
     offsets_path: Path,
+    permutation_offsets_path: Path,
+    permutation_exposure_map_path: Path,
+    bootstrap_offsets_path: Path,
     check_git_commit: bool = True,
 ) -> None:
     seen = set()
@@ -184,11 +197,24 @@ def validate_frozen_inputs(
         EXPECTED_BACKUP_CORRECTION_SHA256,
         "backup correction",
     )
-    _validate_sha256(
+    audit_model_paths = [
         offsets_path,
-        EXPECTED_PROGRAM_NIGHT_OFFSETS_SHA256,
-        "diagnostic PROGRAM:NIGHT offsets",
-    )
+        permutation_offsets_path,
+        permutation_exposure_map_path,
+        bootstrap_offsets_path,
+    ]
+    for path in audit_model_paths:
+        expected = EXPECTED_AUDIT_MODEL_SHA256_BY_NAME.get(path.name)
+        if expected is None:
+            raise ValueError(f"Unexpected frozen audit model input: {path}")
+        _validate_sha256(path, expected, path.name)
+    missing_models = set(EXPECTED_AUDIT_MODEL_SHA256_BY_NAME) - {
+        path.name for path in audit_model_paths
+    }
+    if missing_models:
+        raise ValueError(
+            "Missing frozen audit model inputs: " + ", ".join(sorted(missing_models))
+        )
     if check_git_commit:
         actual_commit = _git_commit_for_path(offsets_path)
         if actual_commit != EXPECTED_DESI_RV_AUDIT_ARTIFACT_COMMIT:
@@ -204,6 +230,14 @@ def program_night_labels(program: pd.Series, night: pd.Series) -> pd.Series:
         + ":"
         + night.astype("string").str.strip().fillna("UNKNOWN")
     )
+
+
+def exposure_keys(frame: pd.DataFrame) -> pd.Series:
+    survey = frame["SURVEY"].astype("string").str.strip().str.upper().fillna("UNKNOWN")
+    program = frame["PROGRAM"].astype("string").str.strip().str.upper().fillna("UNKNOWN")
+    expid = pd.to_numeric(frame["EXPID"], errors="coerce").astype("Int64").astype("string")
+    expid = expid.fillna("0")
+    return survey + "|" + program + "|" + expid
 
 
 def load_program_night_offsets(path: str | Path, n_folds: int | None = None) -> pd.DataFrame:
@@ -229,14 +263,67 @@ def load_program_night_offsets(path: str | Path, n_folds: int | None = None) -> 
     return result.reset_index(drop=True)
 
 
+def load_offset_ensemble(
+    path: str | Path,
+    realization_column: str,
+    n_folds: int | None = None,
+) -> pd.DataFrame:
+    values = pd.read_csv(path)
+    required = {realization_column, "FOLD", "LABEL", "OFFSET_KMS", "COMPONENT"}
+    missing = required - set(values.columns)
+    if missing:
+        raise ValueError(f"Offset ensemble is missing columns: {', '.join(sorted(missing))}")
+    result = values[list(required)].copy()
+    for column in (realization_column, "FOLD", "COMPONENT"):
+        result[column] = pd.to_numeric(result[column], errors="coerce").astype("Int64")
+    result["LABEL"] = result["LABEL"].astype("string")
+    result["OFFSET_KMS"] = pd.to_numeric(result["OFFSET_KMS"], errors="coerce")
+    result = result.dropna(subset=list(required))
+    keys = [realization_column, "FOLD", "LABEL"]
+    if result.duplicated(keys).any():
+        raise ValueError(f"Duplicate offset ensemble rows for {keys}")
+    if n_folds is not None:
+        for realization, group in result.groupby(realization_column, sort=False):
+            folds = sorted(group["FOLD"].astype(int).unique().tolist())
+            if folds != list(range(n_folds)):
+                raise ValueError(
+                    f"Offset realization {realization} folds {folds} do not match "
+                    f"expected {list(range(n_folds))}"
+                )
+    return result.sort_values(keys).reset_index(drop=True)
+
+
+def load_permutation_exposure_map(path: str | Path) -> pd.DataFrame:
+    values = pd.read_csv(path)
+    required = {"PERMUTATION", "EXPOSURE_KEY", "SHUFFLED_NIGHT"}
+    missing = required - set(values.columns)
+    if missing:
+        raise ValueError(f"Permutation exposure map is missing columns: {', '.join(sorted(missing))}")
+    result = values[list(required)].copy()
+    result["PERMUTATION"] = pd.to_numeric(result["PERMUTATION"], errors="coerce").astype(
+        "Int64"
+    )
+    result["EXPOSURE_KEY"] = result["EXPOSURE_KEY"].astype("string")
+    result["SHUFFLED_NIGHT"] = result["SHUFFLED_NIGHT"].astype("string")
+    result = result.dropna(subset=list(required))
+    if result.duplicated(["PERMUTATION", "EXPOSURE_KEY"]).any():
+        raise ValueError("Duplicate permutation/exposure rows")
+    return result.sort_values(["PERMUTATION", "EXPOSURE_KEY"]).reset_index(drop=True)
+
+
 def apply_oof_program_night_offsets(
     frame: pd.DataFrame,
     offsets: pd.DataFrame,
     n_folds: int = 5,
+    labels: pd.Series | None = None,
 ) -> pd.DataFrame:
     result = frame.copy()
     result["PROGRAM_NIGHT_FOLD"] = source_fold_ids(result["GROUP_ID"], n_folds=n_folds).astype(int)
-    result["PROGRAM_NIGHT_LABEL"] = program_night_labels(result["PROGRAM"], result["NIGHT"])
+    result["PROGRAM_NIGHT_LABEL"] = (
+        program_night_labels(result["PROGRAM"], result["NIGHT"])
+        if labels is None
+        else labels.reindex(result.index).astype("string")
+    )
     indexed = offsets.set_index(["FOLD", "LABEL"])
     offset_map = indexed["OFFSET_KMS"]
     component_map = indexed["COMPONENT"]
@@ -740,7 +827,7 @@ def shuffled_program_night_offsets(
     return result.drop(columns=["_PROGRAM"])
 
 
-def candidate_shuffle_transition_null(
+def heuristic_offset_shuffle_null(
     frame: pd.DataFrame,
     offsets: pd.DataFrame,
     candidate_ids: set[int],
@@ -797,6 +884,165 @@ def candidate_shuffle_transition_null(
     return pd.DataFrame(rows, columns=columns)
 
 
+def candidate_full_pipeline_permutation_null(
+    frame: pd.DataFrame,
+    permutation_offsets: pd.DataFrame,
+    permutation_exposure_map: pd.DataFrame,
+    baseline_summary: pd.DataFrame,
+    candidate_ids: set[int],
+    n_folds: int,
+) -> pd.DataFrame:
+    columns = [
+        "PERMUTATION",
+        "N_BEFORE_OUTLIER_PRIMARY",
+        "N_OUTLIER_TO_OUTLIER",
+        "N_OUTLIER_TO_BELOW_SCREENING_THRESHOLD",
+        "N_BELOW_SCREENING_THRESHOLD_TO_OUTLIER",
+        "N_UNSCORABLE",
+        "OOF_RECLASSIFICATION_FRACTION",
+        "EXPOSURE_MAP_COVERAGE_FRACTION",
+    ]
+    if not candidate_ids or permutation_offsets.empty or permutation_exposure_map.empty:
+        return pd.DataFrame(columns=columns)
+    baseline_ids = set(
+        baseline_summary.loc[
+            baseline_summary["GROUP_ID"].astype("int64").isin(candidate_ids)
+            & baseline_summary["PRIMARY_COHORT"].astype(bool)
+            & baseline_summary["CLASSIFICATION_BEFORE"].eq("CONSTANT_RV_OUTLIER"),
+            "GROUP_ID",
+        ].astype("int64")
+    )
+    if not baseline_ids:
+        return pd.DataFrame(columns=columns)
+    candidate_frame = frame[frame["GROUP_ID"].astype("int64").isin(baseline_ids)].copy()
+    candidate_frame["_EXPOSURE_KEY"] = exposure_keys(candidate_frame)
+    offset_ids = set(permutation_offsets["PERMUTATION"].astype(int).unique())
+    exposure_ids = set(permutation_exposure_map["PERMUTATION"].astype(int).unique())
+    rows: list[dict[str, object]] = []
+    for permutation in sorted(offset_ids & exposure_ids):
+        offsets = permutation_offsets.loc[
+            permutation_offsets["PERMUTATION"].astype(int).eq(permutation),
+            ["FOLD", "LABEL", "OFFSET_KMS", "COMPONENT"],
+        ]
+        exposure_map = permutation_exposure_map.loc[
+            permutation_exposure_map["PERMUTATION"].astype(int).eq(permutation)
+        ].set_index("EXPOSURE_KEY")["SHUFFLED_NIGHT"]
+        shuffled_night = candidate_frame["_EXPOSURE_KEY"].map(exposure_map)
+        labels = program_night_labels(candidate_frame["PROGRAM"], shuffled_night)
+        permuted_frame = apply_oof_program_night_offsets(
+            candidate_frame,
+            offsets,
+            n_folds=n_folds,
+            labels=labels,
+        )
+        permuted_summary = summarize_oof_sources(permuted_frame)
+        scorable_ids = set(
+            permuted_summary.loc[
+                permuted_summary["GROUP_ID"].astype("int64").isin(baseline_ids)
+                & permuted_summary["PRIMARY_COHORT"].astype(bool),
+                "GROUP_ID",
+            ].astype("int64")
+        )
+        outlier_ids = set(
+            permuted_summary.loc[
+                permuted_summary["GROUP_ID"].astype("int64").isin(scorable_ids)
+                & permuted_summary["CLASSIFICATION_OOF"].eq("CONSTANT_RV_OUTLIER"),
+                "GROUP_ID",
+            ].astype("int64")
+        )
+        before_outlier = len(baseline_ids)
+        outlier_to_outlier = len(outlier_ids)
+        outlier_to_below = len(scorable_ids - outlier_ids)
+        unscorable = before_outlier - len(scorable_ids)
+        rows.append(
+            {
+                "PERMUTATION": permutation,
+                "N_BEFORE_OUTLIER_PRIMARY": int(before_outlier),
+                "N_OUTLIER_TO_OUTLIER": int(outlier_to_outlier),
+                "N_OUTLIER_TO_BELOW_SCREENING_THRESHOLD": outlier_to_below,
+                "N_BELOW_SCREENING_THRESHOLD_TO_OUTLIER": 0,
+                "N_UNSCORABLE": int(unscorable),
+                "OOF_RECLASSIFICATION_FRACTION": _safe_fraction(
+                    int(outlier_to_below),
+                    int(before_outlier),
+                ),
+                "EXPOSURE_MAP_COVERAGE_FRACTION": float(shuffled_night.notna().mean()),
+            }
+        )
+    return pd.DataFrame(rows, columns=columns)
+
+
+def candidate_bootstrap_stability(
+    frame: pd.DataFrame,
+    bootstrap_offsets: pd.DataFrame,
+    candidate_ids: set[int],
+    n_folds: int,
+) -> pd.DataFrame:
+    columns = [
+        "GROUP_ID",
+        "N_BOOTSTRAPS_TOTAL",
+        "N_BOOTSTRAPS_SCORABLE",
+        "N_BOOTSTRAPS_OUTLIER",
+        "BOOTSTRAP_SCORABLE_FRACTION",
+        "OOF_OUTLIER_BOOTSTRAP_FRACTION",
+        "P_CONST_OOF_BOOTSTRAP_MEDIAN",
+        "MAX_PAIR_SIGMA_OOF_BOOTSTRAP_MEDIAN",
+        "BOOTSTRAP_ROBUST_95",
+    ]
+    if not candidate_ids or bootstrap_offsets.empty:
+        return pd.DataFrame(columns=columns)
+    candidate_frame = frame[frame["GROUP_ID"].astype("int64").isin(candidate_ids)].copy()
+    bootstrap_ids = sorted(bootstrap_offsets["BOOTSTRAP"].astype(int).unique())
+    records: list[pd.DataFrame] = []
+    for bootstrap in bootstrap_ids:
+        offsets = bootstrap_offsets.loc[
+            bootstrap_offsets["BOOTSTRAP"].astype(int).eq(bootstrap),
+            ["FOLD", "LABEL", "OFFSET_KMS", "COMPONENT"],
+        ]
+        corrected = apply_oof_program_night_offsets(candidate_frame, offsets, n_folds=n_folds)
+        summary = summarize_oof_sources(corrected)
+        if summary.empty:
+            continue
+        records.append(
+            summary[
+                [
+                    "GROUP_ID",
+                    "PRIMARY_COHORT",
+                    "CLASSIFICATION_OOF",
+                    "P_CONST_OOF",
+                    "MAX_PAIR_SIGMA_OOF",
+                ]
+            ].assign(BOOTSTRAP=bootstrap)
+        )
+    if not records:
+        return pd.DataFrame(columns=columns)
+    combined = pd.concat(records, ignore_index=True, sort=False)
+    combined["IS_SCORABLE"] = combined["PRIMARY_COHORT"].astype(bool)
+    combined["IS_OUTLIER"] = combined["CLASSIFICATION_OOF"].eq("CONSTANT_RV_OUTLIER")
+    grouped = combined.groupby("GROUP_ID", sort=False)
+    result = grouped.agg(
+        N_BOOTSTRAPS_SCORABLE=("IS_SCORABLE", "sum"),
+        N_BOOTSTRAPS_OUTLIER=("IS_OUTLIER", "sum"),
+        P_CONST_OOF_BOOTSTRAP_MEDIAN=("P_CONST_OOF", "median"),
+        MAX_PAIR_SIGMA_OOF_BOOTSTRAP_MEDIAN=("MAX_PAIR_SIGMA_OOF", "median"),
+    ).reset_index()
+    result["N_BOOTSTRAPS_TOTAL"] = len(bootstrap_ids)
+    result["BOOTSTRAP_SCORABLE_FRACTION"] = (
+        result["N_BOOTSTRAPS_SCORABLE"] / result["N_BOOTSTRAPS_TOTAL"].clip(lower=1)
+    )
+    result["OOF_OUTLIER_BOOTSTRAP_FRACTION"] = np.divide(
+        result["N_BOOTSTRAPS_OUTLIER"],
+        result["N_BOOTSTRAPS_SCORABLE"],
+        out=np.full(len(result), np.nan, dtype=float),
+        where=result["N_BOOTSTRAPS_SCORABLE"].to_numpy(dtype=int) > 0,
+    )
+    result["BOOTSTRAP_ROBUST_95"] = (
+        result["BOOTSTRAP_SCORABLE_FRACTION"].ge(0.95)
+        & result["OOF_OUTLIER_BOOTSTRAP_FRACTION"].ge(0.95)
+    )
+    return result[columns].sort_values("GROUP_ID").reset_index(drop=True)
+
+
 def _candidate_group_ids(
     path: str | Path | None,
     expected_sha256: str | None = STRICT_CANDIDATES_SHA256,
@@ -850,7 +1096,7 @@ def _select_by_candidate_strata(
         if n_take <= 0:
             continue
         subset = subset.assign(
-            _HASH=pd.util.hash_pandas_object(subset["GROUP_ID"].astype("string"), index=False)
+            _HASH=subset["GROUP_ID"].map(stable_hash64).astype("uint64")
         ).sort_values("_HASH", kind="mergesort")
         selected.append(subset.head(n_take))
     if not selected:
@@ -919,6 +1165,15 @@ def _public_manifest(manifest: dict[str, object]) -> dict[str, object]:
             "fits": [_public_file_record(record) for record in input_files["fits"]],
             "backup_correction": _public_file_record(input_files["backup_correction"]),
             "program_night_offsets": _public_file_record(input_files["program_night_offsets"]),
+            "program_night_permutation_offsets": _public_file_record(
+                input_files.get("program_night_permutation_offsets")
+            ),
+            "program_night_permutation_exposure_map": _public_file_record(
+                input_files.get("program_night_permutation_exposure_map")
+            ),
+            "program_night_bootstrap_offsets": _public_file_record(
+                input_files.get("program_night_bootstrap_offsets")
+            ),
             "strict_candidates": _public_file_record(input_files["strict_candidates"]),
         },
         "repositories": manifest["repositories"],
@@ -951,9 +1206,15 @@ def _public_manifest(manifest: dict[str, object]) -> dict[str, object]:
         "new_oof_outlier_fraction": manifest["new_oof_outlier_fraction"],
         "strict_candidate_transition_table": manifest["strict_candidate_transition_table"],
         "primary_cohort_transition_table": manifest["primary_cohort_transition_table"],
-        "candidate_shuffle_transition_null_summary": manifest[
-            "candidate_shuffle_transition_null_summary"
+        "heuristic_offset_shuffle_null_summary": manifest[
+            "heuristic_offset_shuffle_null_summary"
         ],
+        "full_pipeline_permutation_null_summary": manifest[
+            "full_pipeline_permutation_null_summary"
+        ],
+        "injection_recovery_summary": manifest["injection_recovery_summary"],
+        "n_bootstrap_robust_95": manifest["n_bootstrap_robust_95"],
+        "n_robust_diagnostic_subset": manifest["n_robust_diagnostic_subset"],
         "n_oof_outliers": manifest["n_oof_outliers"],
         "n_new_oof_outliers_not_in_strict_screening": manifest[
             "n_new_oof_outliers_not_in_strict_screening"
@@ -981,14 +1242,19 @@ def build_bundles(
     backup_correction_path: str | Path,
     offsets_path: str | Path,
     output_dir: str | Path,
+    permutation_offsets_path: str | Path | None = None,
+    permutation_exposure_map_path: str | Path | None = None,
+    bootstrap_offsets_path: str | Path | None = None,
     strict_candidates_path: str | Path | None = None,
     public_report_dir: str | Path | None = None,
     min_sn_r: float = 5.0,
     n_folds: int = 5,
     control_ratio: float = 1.0,
     injection_base_ratio: float = 1.0,
-    n_candidate_shuffles: int = 20,
+    n_candidate_shuffles: int = 0,
     candidate_shuffle_seed: int = 20260620,
+    injection_trials_per_cell: int = 1000,
+    injection_seed: int = 20260713,
     backup_correction_md5: str = DEFAULT_BACKUP_CORRECTION_MD5,
     strict_candidates_sha256: str | None = STRICT_CANDIDATES_SHA256,
     check_frozen_input_hashes: bool = True,
@@ -1001,21 +1267,48 @@ def build_bundles(
         control_ratio=control_ratio,
         injection_base_ratio=injection_base_ratio,
         n_candidate_shuffles=n_candidate_shuffles,
+        injection_trials_per_cell=injection_trials_per_cell,
     )
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     fits_paths = [Path(path) for path in fits_paths]
     backup_correction_path = Path(backup_correction_path)
     offsets_path = Path(offsets_path)
+    permutation_offsets_path_obj = (
+        Path(permutation_offsets_path) if permutation_offsets_path is not None else None
+    )
+    permutation_exposure_map_path_obj = (
+        Path(permutation_exposure_map_path)
+        if permutation_exposure_map_path is not None
+        else None
+    )
+    bootstrap_offsets_path_obj = (
+        Path(bootstrap_offsets_path) if bootstrap_offsets_path is not None else None
+    )
     strict_candidates_path_obj = Path(strict_candidates_path) if strict_candidates_path else None
     if strict_candidates_path_obj is None and not allow_empty_candidates:
         raise ValueError("--strict-candidates is required for the frozen build workflow")
+    ensemble_paths = {
+        "--permutation-offsets": permutation_offsets_path_obj,
+        "--permutation-exposure-map": permutation_exposure_map_path_obj,
+        "--bootstrap-offsets": bootstrap_offsets_path_obj,
+    }
+    if check_frozen_input_hashes:
+        missing_ensembles = [name for name, path in ensemble_paths.items() if path is None]
+        if missing_ensembles:
+            raise ValueError(
+                "The frozen build requires all inference ensembles: "
+                + ", ".join(missing_ensembles)
+            )
     validate_fold_fixture(n_folds=n_folds)
     if check_frozen_input_hashes:
         validate_frozen_inputs(
             fits_paths=fits_paths,
             backup_correction_path=backup_correction_path,
             offsets_path=offsets_path,
+            permutation_offsets_path=permutation_offsets_path_obj,
+            permutation_exposure_map_path=permutation_exposure_map_path_obj,
+            bootstrap_offsets_path=bootstrap_offsets_path_obj,
             check_git_commit=check_offsets_git_commit,
         )
 
@@ -1062,13 +1355,76 @@ def build_bundles(
     primary_transition = primary_cohort_transition_table(summary)
     threshold_sensitivity = threshold_sensitivity_table(summary, candidate_ids)
     metric_shift_summary = metric_shift_summary_table(summary, candidate_ids)
-    shuffled_null = candidate_shuffle_transition_null(
+    shuffled_null = heuristic_offset_shuffle_null(
         frame=frame,
         offsets=offsets,
         candidate_ids=candidate_ids,
         n_folds=n_folds,
         n_shuffles=n_candidate_shuffles,
         seed=candidate_shuffle_seed,
+    )
+    full_pipeline_null = pd.DataFrame()
+    if permutation_offsets_path_obj is not None and permutation_exposure_map_path_obj is not None:
+        permutation_offsets = load_offset_ensemble(
+            permutation_offsets_path_obj,
+            "PERMUTATION",
+            n_folds=n_folds,
+        )
+        permutation_exposure_map = load_permutation_exposure_map(
+            permutation_exposure_map_path_obj
+        )
+        full_pipeline_null = candidate_full_pipeline_permutation_null(
+            frame,
+            permutation_offsets,
+            permutation_exposure_map,
+            summary,
+            candidate_ids,
+            n_folds=n_folds,
+        )
+    else:
+        permutation_offsets = pd.DataFrame()
+        permutation_exposure_map = pd.DataFrame()
+
+    bootstrap_stability = pd.DataFrame()
+    offset_uncertainty = pd.DataFrame()
+    if bootstrap_offsets_path_obj is not None:
+        bootstrap_offsets = load_offset_ensemble(
+            bootstrap_offsets_path_obj,
+            "BOOTSTRAP",
+            n_folds=n_folds,
+        )
+        bootstrap_stability = candidate_bootstrap_stability(
+            frame,
+            bootstrap_offsets,
+            candidate_ids,
+            n_folds=n_folds,
+        )
+        offset_uncertainty = bootstrap_offset_uncertainty(bootstrap_offsets)
+        summary = summary.merge(bootstrap_stability, on="GROUP_ID", how="left")
+    else:
+        bootstrap_offsets = pd.DataFrame()
+
+    robustness = candidate_robustness_table(frame, candidate_ids)
+    summary = summary.merge(robustness, on="GROUP_ID", how="left")
+    bootstrap_robust = summary.get(
+        "BOOTSTRAP_ROBUST_95", pd.Series(False, index=summary.index)
+    ).astype("boolean")
+    loo_all = summary.get(
+        "LOO_ALL_OUTLIER", pd.Series(False, index=summary.index)
+    ).astype("boolean")
+    disjoint_pairs = summary.get(
+        "N_DISJOINT_SIGNIFICANT_PAIRS", pd.Series(0, index=summary.index)
+    )
+    only_cross_program = summary.get(
+        "SIGNAL_ONLY_CROSS_PROGRAM", pd.Series(True, index=summary.index)
+    ).astype("boolean")
+    summary["ROBUST_DIAGNOSTIC_SUBSET"] = (
+        summary["WAS_STRICT_SCREENING_CANDIDATE"].astype(bool)
+        & summary["REMAINS_OOF_OUTLIER"].astype(bool)
+        & bootstrap_robust.fillna(False).astype(bool)
+        & loo_all.fillna(False).astype(bool)
+        & disjoint_pairs.fillna(0).ge(2)
+        & ~only_cross_program.fillna(True).astype(bool)
     )
 
     inspection_control_ids = _cadence_matched_inspection_control_ids(
@@ -1111,13 +1467,25 @@ def build_bundles(
         "BUNDLE_ROLE",
     ] = "STRICT_SCREENING_CANDIDATE"
 
+    injection_recovery = run_injection_recovery(
+        bundle,
+        offset_uncertainty=offset_uncertainty,
+        n_trials_per_cell=injection_trials_per_cell,
+        seed=injection_seed,
+    )
+
     source_path = output_dir / "source_summary_oof.parquet"
     bundle_path = output_dir / "candidate_epoch_bundle.parquet"
     transition_path = output_dir / "strict_candidate_transition_table.csv"
     primary_transition_path = output_dir / "primary_cohort_transition_table.csv"
     threshold_sensitivity_path = output_dir / "threshold_sensitivity.csv"
     metric_shift_summary_path = output_dir / "metric_shift_summary.csv"
-    shuffled_null_path = output_dir / "candidate_shuffle_transition_null.csv"
+    shuffled_null_path = output_dir / "heuristic_offset_shuffle_null.csv"
+    full_pipeline_null_path = output_dir / "full_pipeline_permutation_null.csv"
+    bootstrap_stability_path = output_dir / "candidate_bootstrap_stability.parquet"
+    offset_uncertainty_path = output_dir / "program_night_offset_uncertainty.csv"
+    robustness_path = output_dir / "candidate_robustness.parquet"
+    injection_recovery_path = output_dir / "injection_recovery.csv"
     manifest_path = output_dir / "build_manifest.json"
     summary.to_parquet(source_path, index=False)
     bundle[_bundle_columns(bundle)].to_parquet(bundle_path, index=False)
@@ -1126,12 +1494,59 @@ def build_bundles(
     threshold_sensitivity.to_csv(threshold_sensitivity_path, index=False)
     metric_shift_summary.to_csv(metric_shift_summary_path, index=False)
     shuffled_null.to_csv(shuffled_null_path, index=False)
+    full_pipeline_null.to_csv(full_pipeline_null_path, index=False)
+    bootstrap_stability.to_parquet(bootstrap_stability_path, index=False)
+    offset_uncertainty.to_csv(offset_uncertainty_path, index=False)
+    robustness.to_parquet(robustness_path, index=False)
+    injection_recovery.to_csv(injection_recovery_path, index=False)
     repo_root = Path(__file__).resolve().parents[2]
     inspection_and_injection_overlap = inspection_control_ids & injection_base_ids
     shuffled_reclass = pd.to_numeric(
         shuffled_null["N_OUTLIER_TO_BELOW_SCREENING_THRESHOLD"],
         errors="coerce",
     )
+    full_pipeline_reclass = pd.to_numeric(
+        full_pipeline_null.get("N_OUTLIER_TO_BELOW_SCREENING_THRESHOLD", pd.Series(dtype=float)),
+        errors="coerce",
+    )
+    full_pipeline_unscorable = pd.to_numeric(
+        full_pipeline_null.get("N_UNSCORABLE", pd.Series(dtype=float)),
+        errors="coerce",
+    )
+    full_pipeline_coverage = pd.to_numeric(
+        full_pipeline_null.get("EXPOSURE_MAP_COVERAGE_FRACTION", pd.Series(dtype=float)),
+        errors="coerce",
+    )
+    injection_summary: list[dict[str, object]] = []
+    if not injection_recovery.empty:
+        injection_overall = injection_recovery.loc[
+            injection_recovery["STRATUM"].eq("ALL")
+        ].copy()
+        selected_injection = injection_overall.loc[
+            injection_overall["AMPLITUDE_KMS"].eq(0)
+            | (
+                injection_overall["AMPLITUDE_KMS"].eq(20)
+                & injection_overall["PERIOD_DAYS"].eq(10)
+                & injection_overall["ECCENTRICITY"].eq(0)
+            ),
+            [
+                "NOISE_MODEL",
+                "SIGNAL_MODEL",
+                "AMPLITUDE_KMS",
+                "PERIOD_DAYS",
+                "ECCENTRICITY",
+                "N_TRIALS",
+                "N_DETECTED",
+                "DETECTION_FRACTION",
+            ],
+        ]
+        injection_summary = [
+            {
+                key: None if pd.isna(value) else value
+                for key, value in record.items()
+            }
+            for record in selected_injection.to_dict("records")
+        ]
     manifest = {
         "parameters": {
             "min_sn_r": min_sn_r,
@@ -1140,6 +1555,9 @@ def build_bundles(
             "injection_base_ratio": injection_base_ratio,
             "n_candidate_shuffles": n_candidate_shuffles,
             "candidate_shuffle_seed": candidate_shuffle_seed,
+            "fold_hash_algorithm": FOLD_HASH_ALGORITHM,
+            "injection_trials_per_cell": injection_trials_per_cell,
+            "injection_seed": injection_seed,
             "backup_correction_md5": backup_correction_md5,
             "strict_candidates_sha256": strict_candidates_sha256 or "",
             "check_frozen_input_hashes": check_frozen_input_hashes,
@@ -1149,6 +1567,21 @@ def build_bundles(
             "fits": [_file_record(path) for path in fits_paths],
             "backup_correction": _file_record(backup_correction_path),
             "program_night_offsets": _file_record(offsets_path),
+            "program_night_permutation_offsets": (
+                _file_record(permutation_offsets_path_obj)
+                if permutation_offsets_path_obj is not None
+                else None
+            ),
+            "program_night_permutation_exposure_map": (
+                _file_record(permutation_exposure_map_path_obj)
+                if permutation_exposure_map_path_obj is not None
+                else None
+            ),
+            "program_night_bootstrap_offsets": (
+                _file_record(bootstrap_offsets_path_obj)
+                if bootstrap_offsets_path_obj is not None
+                else None
+            ),
             "strict_candidates": (
                 _file_record(strict_candidates_path_obj)
                 if strict_candidates_path_obj is not None
@@ -1197,7 +1630,7 @@ def build_bundles(
         "new_oof_outlier_fraction": _safe_fraction(n_new_oof_outliers, int(len(primary_non_strict))),
         "strict_candidate_transition_table": transition.to_dict("records"),
         "primary_cohort_transition_table": primary_transition.to_dict("records"),
-        "candidate_shuffle_transition_null_summary": {
+        "heuristic_offset_shuffle_null_summary": {
             "n_shuffles": int(len(shuffled_null)),
             "min_outlier_to_below_screening_threshold": (
                 int(shuffled_reclass.min()) if len(shuffled_reclass.dropna()) else None
@@ -1214,6 +1647,50 @@ def build_bundles(
                 else None
             ),
         },
+        "full_pipeline_permutation_null_summary": {
+            "n_permutations": int(len(full_pipeline_null)),
+            "min_outlier_to_below_screening_threshold": (
+                int(full_pipeline_reclass.min())
+                if len(full_pipeline_reclass.dropna())
+                else None
+            ),
+            "median_outlier_to_below_screening_threshold": (
+                float(full_pipeline_reclass.median())
+                if len(full_pipeline_reclass.dropna())
+                else None
+            ),
+            "max_outlier_to_below_screening_threshold": (
+                int(full_pipeline_reclass.max())
+                if len(full_pipeline_reclass.dropna())
+                else None
+            ),
+            "n_ge_real_outlier_to_below_screening_threshold": (
+                int((full_pipeline_reclass >= n_strict_reclassified_primary).sum())
+                if len(full_pipeline_reclass.dropna())
+                else None
+            ),
+            "corrected_empirical_exceedance_probability": (
+                float(
+                    (1 + (full_pipeline_reclass >= n_strict_reclassified_primary).sum())
+                    / (1 + len(full_pipeline_reclass.dropna()))
+                )
+                if len(full_pipeline_reclass.dropna())
+                else None
+            ),
+            "median_unscorable": (
+                float(full_pipeline_unscorable.median())
+                if len(full_pipeline_unscorable.dropna())
+                else None
+            ),
+            "min_exposure_map_coverage_fraction": (
+                float(full_pipeline_coverage.min())
+                if len(full_pipeline_coverage.dropna())
+                else None
+            ),
+        },
+        "injection_recovery_summary": injection_summary,
+        "n_bootstrap_robust_95": int(bootstrap_robust.fillna(False).astype(bool).sum()),
+        "n_robust_diagnostic_subset": int(summary["ROBUST_DIAGNOSTIC_SUBSET"].sum()),
         "n_oof_outliers": int(summary["REMAINS_OOF_OUTLIER"].sum()),
         "n_new_oof_outliers_not_in_strict_screening": n_new_oof_outliers,
         "n_primary_non_strict_sources": int(len(primary_non_strict)),
@@ -1228,7 +1705,12 @@ def build_bundles(
         "primary_cohort_transition_table_csv": _path_text(primary_transition_path),
         "threshold_sensitivity_csv": _path_text(threshold_sensitivity_path),
         "metric_shift_summary_csv": _path_text(metric_shift_summary_path),
-        "candidate_shuffle_transition_null_csv": _path_text(shuffled_null_path),
+        "heuristic_offset_shuffle_null_csv": _path_text(shuffled_null_path),
+        "full_pipeline_permutation_null_csv": _path_text(full_pipeline_null_path),
+        "candidate_bootstrap_stability": _path_text(bootstrap_stability_path),
+        "program_night_offset_uncertainty_csv": _path_text(offset_uncertainty_path),
+        "candidate_robustness": _path_text(robustness_path),
+        "injection_recovery_csv": _path_text(injection_recovery_path),
     }
     manifest["output_files"] = {
         "source_summary_oof": _file_record(source_path),
@@ -1237,7 +1719,12 @@ def build_bundles(
         "primary_cohort_transition_table": _file_record(primary_transition_path),
         "threshold_sensitivity": _file_record(threshold_sensitivity_path),
         "metric_shift_summary": _file_record(metric_shift_summary_path),
-        "candidate_shuffle_transition_null": _file_record(shuffled_null_path),
+        "heuristic_offset_shuffle_null": _file_record(shuffled_null_path),
+        "full_pipeline_permutation_null": _file_record(full_pipeline_null_path),
+        "candidate_bootstrap_stability": _file_record(bootstrap_stability_path),
+        "program_night_offset_uncertainty": _file_record(offset_uncertainty_path),
+        "candidate_robustness": _file_record(robustness_path),
+        "injection_recovery": _file_record(injection_recovery_path),
     }
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     if public_report_dir is not None:
@@ -1247,7 +1734,11 @@ def build_bundles(
         primary_transition.to_csv(public_dir / "primary_cohort_transition_table.csv", index=False)
         threshold_sensitivity.to_csv(public_dir / "threshold_sensitivity.csv", index=False)
         metric_shift_summary.to_csv(public_dir / "metric_shift_summary.csv", index=False)
-        shuffled_null.to_csv(public_dir / "candidate_shuffle_transition_null.csv", index=False)
+        shuffled_null.to_csv(public_dir / "heuristic_offset_shuffle_null.csv", index=False)
+        full_pipeline_null.to_csv(public_dir / "full_pipeline_permutation_null.csv", index=False)
+        offset_uncertainty.to_csv(public_dir / "program_night_offset_uncertainty.csv", index=False)
+        injection_recovery.to_csv(public_dir / "injection_recovery.csv", index=False)
+        write_bundle_build_summary(manifest, public_dir / "bundle_build_summary.md")
         (public_dir / "build_manifest_public.json").write_text(
             json.dumps(_public_manifest(manifest), indent=2, sort_keys=True) + "\n",
             encoding="utf-8",

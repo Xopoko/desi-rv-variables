@@ -47,12 +47,13 @@ Raw DESI FITS files and derived Parquet bundles are intentionally ignored by
 git. Build them locally from public DESI DR1 files and the public
 `desi-rv-audit` artifacts.
 
-The frozen offset table is the one published in `desi-rv-audit` `v0.2.1`.
-For a clean checkout, clone the audit repository at that tag:
+The frozen offset ensemble is published by an immutable `desi-rv-audit`
+release. The exact tag, commit, and SHA-256 values are recorded in the public
+build manifest. For a clean checkout, clone both matching releases:
 
 ```bash
-git clone --branch v0.2.1 https://github.com/Xopoko/desi-rv-audit.git
-git clone --branch v0.1.3 https://github.com/Xopoko/desi-rv-variables.git
+git clone --branch v0.3.0 https://github.com/Xopoko/desi-rv-audit.git
+git clone --branch v0.2.0 https://github.com/Xopoko/desi-rv-variables.git
 ```
 
 Expected local inputs can be provided via environment variables:
@@ -73,8 +74,12 @@ $env:DESI_RV_STRICT_CANDIDATES = "C:\path\to\candidate_sources_strict.csv"
 
 If `DESI_RV_STRICT_CANDIDATES` is not set, `scripts/build_local_bundles.sh`
 and `scripts/build_local_bundles.ps1` download `candidate_sources_strict.csv.gz`
-from this repository's `v0.1.3` release and verify its SHA-256 checksum before
+from this repository's `v0.2.0` release and verify its SHA-256 checksum before
 building local artifacts.
+
+The same command downloads the three compressed permutation/bootstrap model
+assets from `desi-rv-audit` `v0.3.0` when their uncompressed CSVs are absent.
+Both gzip and raw SHA-256 values are checked before any FITS input is loaded.
 
 The DESI DR1 stellar VAC reports 10,012,925 single-epoch spectra with stellar
 parameters and radial velocities and 1,718,305 Gaia sources with more than one
@@ -100,6 +105,9 @@ parent/
     data/desi_main/rvpix_exp-main-dark.fits
     data/desi_corrections/backup_correction.fits
     reports/program_night_artifacts/diagnostic_offsets_program_night.csv
+    reports/program_night_artifacts/program_night_permutation_offsets.csv
+    reports/program_night_artifacts/program_night_permutation_exposure_map.csv
+    reports/program_night_artifacts/program_night_bootstrap_offsets.csv
   desi-rv-variables/
 ```
 
@@ -122,6 +130,9 @@ python -m pip install -e ".[dev]"
 ./scripts/build_local_bundles.sh
 ```
 
+For the exact tested dependency set, install `requirements-lock.txt` first and
+then install the local package with `python -m pip install -e . --no-deps`.
+
 To only download and validate the frozen strict candidate input:
 
 ```bash
@@ -135,7 +146,12 @@ artifacts/source_summary_oof.parquet
 artifacts/candidate_epoch_bundle.parquet
 artifacts/strict_candidate_transition_table.csv
 artifacts/primary_cohort_transition_table.csv
-artifacts/candidate_shuffle_transition_null.csv
+artifacts/heuristic_offset_shuffle_null.csv
+artifacts/full_pipeline_permutation_null.csv
+artifacts/candidate_bootstrap_stability.parquet
+artifacts/candidate_robustness.parquet
+artifacts/program_night_offset_uncertainty.csv
+artifacts/injection_recovery.csv
 artifacts/build_manifest.json
 reports/build_manifest_public.json
 ```
@@ -153,7 +169,8 @@ separates complete-case reclassification from OOF coverage loss and
 cross-component exclusions.
 
 The compact tracked files under `reports/` publish the sanitized manifest,
-transition tables, shuffled-candidate null control, threshold sensitivity, and
+transition tables, full-pipeline permutation control, bootstrap offset
+uncertainty, injection-recovery sensitivity, threshold sensitivity, and
 metric-shift summaries without source-level rows.
 
 ## Method Boundary
@@ -180,9 +197,15 @@ The protocol was internally frozen before ranked source-ID inspection, but it
 is not a formal preregistration. Confirmation would require a pre-specified
 analysis on an independent data slice or future release.
 
-`VRAD_ERROR_CALIBRATED` does not include uncertainty in the estimated
-`PROGRAM:NIGHT` offsets. The resulting `p_const_oof` values are screening
-statistics, not fully calibrated posterior probabilities or FDR estimates.
+The frozen requirements for such a test are recorded in
+[`research/confirmation_protocol.md`](research/confirmation_protocol.md).
+
+`VRAD_ERROR_CALIBRATED` does not fold the uncertainty of the estimated
+`PROGRAM:NIGHT` offsets into an independent per-epoch error. That uncertainty
+is correlated across epochs sharing a label, so the pipeline propagates it by
+repeating source-level scoring across source-bootstrap offset realizations.
+The resulting `p_const_oof` values remain screening statistics, not fully
+calibrated posterior probabilities or FDR estimates.
 
 ## References
 

@@ -37,3 +37,16 @@ formal preregistration.
 
 - Include the pinned clean-clone instruction in the immutable release tag.
 - Point the default strict-candidate release asset URL at `v0.1.3`.
+
+## v0.2.0
+
+- Replace pandas-dependent fold hashing with the audit's explicit BLAKE2b
+  contract and regenerate every OOF offset model.
+- Replace the primary candidate null with complete exposure-level night
+  permutations refitted independently in every source fold.
+- Propagate offset uncertainty through Bayesian source-bootstrap models.
+- Add leave-one-epoch-out, independent-pair, intrinsic-jitter, and
+  within-program robustness diagnostics.
+- Add Gaussian and heavy-tailed Keplerian injection-recovery sensitivity runs.
+- Reserve `ROBUST_DIAGNOSTIC_SUBSET` for deterministic triage; no gold sample,
+  calibrated FDR, or novelty claim is introduced.
