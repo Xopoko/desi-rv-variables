@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 
+from .catalogues import crossmatch_experiment_outputs
+from .exploratory_reporting import publish_experiment_report
+from .experiments import run_experiments
 from .oof import (
     DEFAULT_BACKUP_CORRECTION_MD5,
     STRICT_CANDIDATES_GZ_SHA256,
@@ -9,6 +13,7 @@ from .oof import (
     build_bundles,
 )
 from .local_build import build_local_bundles, ensure_strict_candidates, resolve_local_build_paths
+from .spectral_validation import validate_followup_spectra
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -82,6 +87,43 @@ def _parser() -> argparse.ArgumentParser:
     local.add_argument("--force-audit-model-download", action="store_true")
     local.add_argument("--skip-frozen-input-hash-checks", action="store_true")
     local.add_argument("--skip-offsets-git-commit-check", action="store_true")
+
+    experiments = sub.add_parser(
+        "run-experiments",
+        help="Run frozen high-amplitude, acceleration, and metal-poor screens",
+    )
+    experiments.add_argument("--project-root", default=".")
+    experiments.add_argument("--source-summary")
+    experiments.add_argument("--epoch-bundle")
+    experiments.add_argument("--offset-uncertainty")
+    experiments.add_argument("--output-dir")
+    experiments.add_argument("--acceleration-permutations", type=int, default=200)
+    experiments.add_argument("--seed", type=int, default=20260714)
+
+    crossmatch = sub.add_parser(
+        "crossmatch-experiments",
+        help="Crossmatch experiment detections against frozen Gaia DR3 and SpecDis resources",
+    )
+    crossmatch.add_argument("--project-root", default=".")
+    crossmatch.add_argument("--experiment-dir")
+    crossmatch.add_argument("--specdis", required=True)
+
+    spectra = sub.add_parser(
+        "validate-spectra",
+        help="Validate externally unmatched metal-poor targets against DR1 cframe fluxes",
+    )
+    spectra.add_argument("--project-root", default=".")
+    spectra.add_argument("--epoch-bundle")
+    spectra.add_argument("--experiment-dir")
+    spectra.add_argument("--cache-dir")
+
+    publish = sub.add_parser(
+        "publish-experiments",
+        help="Publish aggregate experiment tables, report, and sanitized provenance",
+    )
+    publish.add_argument("--project-root", default=".")
+    publish.add_argument("--experiment-dir")
+    publish.add_argument("--report-dir")
     return parser
 
 
@@ -154,6 +196,71 @@ def main() -> None:
         print(f"source_summary_oof rows: {len(result.source_summary)}")
         print(f"candidate_epoch_bundle rows: {len(result.epoch_bundle)}")
         print(f"manifest: {result.manifest}")
+    elif args.command == "run-experiments":
+        root = Path(args.project_root).expanduser().resolve()
+        result = run_experiments(
+            source_summary_path=args.source_summary
+            or root / "artifacts" / "source_summary_oof.parquet",
+            epoch_bundle_path=args.epoch_bundle
+            or root / "artifacts" / "candidate_epoch_bundle.parquet",
+            offset_uncertainty_path=args.offset_uncertainty
+            or root / "artifacts" / "program_night_offset_uncertainty.csv",
+            output_dir=args.output_dir or root / "artifacts" / "exploratory",
+            acceleration_permutations=args.acceleration_permutations,
+            seed=args.seed,
+        )
+        counts = result.manifest["counts"]
+        print(f"high-amplitude detections: {counts['high_amplitude_detected_sources']}")
+        print(f"acceleration detections: {counts['acceleration_detected_sources']}")
+        print(f"metal-poor candidates: {counts['metal_poor_candidates']}")
+    elif args.command == "crossmatch-experiments":
+        root = Path(args.project_root).expanduser().resolve()
+        _crossmatch, _metal, manifest = crossmatch_experiment_outputs(
+            experiment_dir=args.experiment_dir or root / "artifacts" / "exploratory",
+            specdis_path=args.specdis,
+        )
+        counts = manifest["counts"]
+        print(f"crossmatched detections: {counts['detected_sources_crossmatched']}")
+        print(f"no declared catalogue match: {counts['no_declared_catalogue_match']}")
+        print(
+            "metal-poor without declared match: "
+            f"{counts['metal_poor_no_declared_catalogue_match']}"
+        )
+    elif args.command == "validate-spectra":
+        root = Path(args.project_root).expanduser().resolve()
+        experiment_dir = Path(
+            args.experiment_dir or root / "artifacts" / "exploratory"
+        )
+        _epochs, _sources, manifest = validate_followup_spectra(
+            epoch_bundle_path=args.epoch_bundle
+            or root / "artifacts" / "candidate_epoch_bundle.parquet",
+            high_amplitude_path=experiment_dir / "high_amplitude_candidates.parquet",
+            metal_external_path=experiment_dir / "metal_poor_external_screen.parquet",
+            output_dir=experiment_dir,
+            cache_dir=args.cache_dir or experiment_dir / "spectra_cache",
+        )
+        counts = manifest["counts"]
+        print(f"spectrally checked sources: {counts['sources']}")
+        print(
+            "flux-level consistent sources: "
+            f"{counts['flux_level_consistent_sources']}"
+        )
+    elif args.command == "publish-experiments":
+        root = Path(args.project_root).expanduser().resolve()
+        manifest = publish_experiment_report(
+            experiment_dir=args.experiment_dir
+            or root / "artifacts" / "exploratory",
+            report_dir=args.report_dir or root / "reports",
+        )
+        results = manifest["aggregate_results"]
+        print(
+            "high-amplitude detections: "
+            f"{results['high_amplitude_detected_sources']}"
+        )
+        print(
+            "flux-level consistent targets: "
+            f"{results['flux_level_consistent_sources']}"
+        )
 
 
 if __name__ == "__main__":

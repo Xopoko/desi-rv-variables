@@ -1,0 +1,177 @@
+{
+  "aggregate_outputs": {
+    "exploratory_acceleration_gate_summary.csv": "cded08b517007848608ae2e62a8bce91d27d000c27311df5a6d6234df0a60b6a",
+    "exploratory_experiments_summary.md": "4fb47bec78b1739a54a046b4a03cebfdd40f7c0b9cc055b64c501854500adebc",
+    "exploratory_external_match_context.csv": "95a8ef204ab928e721bb6f4bdd29f2cc2bad468fd614512163a99f15c043a751",
+    "exploratory_high_amplitude_by_program.csv": "529d3e63f6c18417fc59fa7d2a78a1b835c80b2d37292e6f2ccf38ea77497c07",
+    "exploratory_spectral_validation_summary.csv": "224a0f5ca567546c66de8030822904307813c0069b411f791b0bcf632a1724f5"
+  },
+  "aggregate_results": {
+    "acceleration_detected_sources": 0,
+    "acceleration_eligible_sequences": 56,
+    "flux_level_checked_epochs": 19,
+    "flux_level_checked_sources": 4,
+    "flux_level_consistent_sources": 4,
+    "high_amplitude_detected_fraction": 0.20671563483735572,
+    "high_amplitude_detected_sources": 197,
+    "high_amplitude_eligible_sources": 953,
+    "metal_poor_no_extended_catalogue_match": 4,
+    "metal_poor_screen_sources": 6
+  },
+  "analysis_source_hashes": {
+    "research/amendments.md": "337329f5118b0118f839c4d9f8135c8c5de109d9079916fa05049375fc3c411d",
+    "research/exploratory_experiments_protocol.md": "3de6a596a492bd6483935727fd2d52e1d48903ecc501b91987215f8a4c905211",
+    "src/desi_rv_variables/catalogues.py": "1ef0930be5a09f04ab567e24d84f112465a7e0f7e9138d96105e317ad64c8e84",
+    "src/desi_rv_variables/experiments.py": "4359c39ef45fc7d8d29f3a285ad8e097e9e671aaa245f2581f203ebcce38e523",
+    "src/desi_rv_variables/exploratory_reporting.py": "d13921bc607d91ec514ad277994e18140e5d8eb0c22b9e044828ed6fc167c978",
+    "src/desi_rv_variables/provenance.py": "013d91a4ea4ade63ace65139c735131b98df82206d36fa03a36427be8bf9fbe5",
+    "src/desi_rv_variables/spectral_validation.py": "689f31035c8c50d027734e459694a32401c500d8e27f6579dce248ca30149159"
+  },
+  "external_catalogue_provenance": {
+    "gaia": {
+      "release": "DR3",
+      "tables": [
+        "gaiadr3.nss_two_body_orbit",
+        "gaiadr3.nss_acceleration_astro",
+        "gaiadr3.nss_non_linear_spectro",
+        "gaiadr3.vari_summary"
+      ],
+      "tap_endpoint": "https://gea.esac.esa.int/tap-server/tap/sync"
+    },
+    "query_timestamp_utc": "2026-07-13T06:59:55.697375+00:00",
+    "secondary_catalogues": {
+      "simbad_rule": "exact Gaia DR3 identifier",
+      "simbad_tap_endpoint": "https://simbad.cds.unistra.fr/simbad/sim-tap/sync",
+      "vsx_radius_arcsec": 2.0,
+      "vsx_table": "B/vsx/vsx",
+      "vsx_tap_endpoint": "https://tapvizier.cds.unistra.fr/TAPVizieR/tap/sync"
+    },
+    "specdis": {
+      "expected_sha256": "25075043f066c27af6ac25edd381cdff20930ed87f9d337b2d9c2df1403ddf1b",
+      "name": "iron-yr1-v2.1.fits",
+      "sha256": "25075043f066c27af6ac25edd381cdff20930ed87f9d337b2d9c2df1403ddf1b"
+    }
+  },
+  "frozen_experiment_inputs": {
+    "candidate_epoch_bundle": {
+      "name": "candidate_epoch_bundle.parquet",
+      "sha256": "c74d21c6070d61874b049b18b6e58f34d564f049fb1001185f69fe340a70bc96",
+      "size": 23403851
+    },
+    "program_night_offset_uncertainty": {
+      "name": "program_night_offset_uncertainty.csv",
+      "sha256": "43baf85681a1f19b680e980aaabed146b607c82b2dc5a0af107e0a24b57bfd71",
+      "size": 106330
+    },
+    "source_summary_oof": {
+      "name": "source_summary_oof.parquet",
+      "sha256": "d34ae63b08c9082c240acffe0ffcb92a2607289236afe69ec6970449a657c42f",
+      "size": 56109090
+    }
+  },
+  "frozen_experiment_parameters": {
+    "acceleration_permutations": 200,
+    "seed": 20260714
+  },
+  "frozen_experiment_thresholds": {
+    "acceleration_loo_min_slope_sigma": 3.0,
+    "acceleration_max_reduced_chi2": 3.0,
+    "acceleration_min_baseline_days": 180.0,
+    "acceleration_min_delta_chi2": 25.0,
+    "acceleration_min_end_to_end_kms": 20.0,
+    "acceleration_min_epochs": 4,
+    "acceleration_min_nights": 4,
+    "acceleration_min_slope_sigma": 5.0,
+    "high_amplitude_min_baseline_days": 30.0,
+    "high_amplitude_min_delta_kms": 30.0,
+    "high_amplitude_min_epochs": 4,
+    "high_amplitude_min_nights": 3,
+    "high_amplitude_min_pair_sigma": 8.0,
+    "metal_poor_max_median_feh": -2.0,
+    "metal_poor_max_robust_feh_width": 0.3,
+    "metal_poor_max_teff": 7000.0,
+    "metal_poor_min_finite_feh_epochs": 3,
+    "metal_poor_min_teff": 4000.0
+  },
+  "private_followup_dossier": "followup_dossiers.md",
+  "private_manifest_hashes": {
+    "catalogue_crossmatch_manifest": "c6ec50932170d7012a2ded1ef1dad5356d221c44c686e38196ace712efa1c5da",
+    "experiment_manifest": "caf819b9ac3ecbea7dfd6d656ab18b43425ea3cc38bd27cf7dabcf7ad47951f5",
+    "spectral_validation_manifest": "b573f9aa7553ec4f6e42b38531e1a576c688b7d383996eabd882c6860c6e07cb"
+  },
+  "protocol": "research/exploratory_experiments_protocol.md",
+  "runtime_environments": {
+    "catalogue_crossmatch": {
+      "implementation": "CPython",
+      "packages": {
+        "astropy": "8.0.0",
+        "astropy-healpix": "2.0.0",
+        "desi-rv-audit": "0.3.0",
+        "desi-rv-variables": "0.3.0",
+        "httpio": "0.3.0",
+        "numpy": "2.4.6",
+        "pandas": "2.3.3",
+        "pyarrow": "24.0.0",
+        "scipy": "1.18.0"
+      },
+      "platform": "macOS-26.5.1-arm64-arm-64bit",
+      "python": "3.12.4"
+    },
+    "experiments": {
+      "implementation": "CPython",
+      "packages": {
+        "astropy": "8.0.0",
+        "astropy-healpix": "2.0.0",
+        "desi-rv-audit": "0.3.0",
+        "desi-rv-variables": "0.3.0",
+        "httpio": "0.3.0",
+        "numpy": "2.4.6",
+        "pandas": "2.3.3",
+        "pyarrow": "24.0.0",
+        "scipy": "1.18.0"
+      },
+      "platform": "macOS-26.5.1-arm64-arm-64bit",
+      "python": "3.12.4"
+    },
+    "spectral_validation": {
+      "implementation": "CPython",
+      "packages": {
+        "astropy": "8.0.0",
+        "astropy-healpix": "2.0.0",
+        "desi-rv-audit": "0.3.0",
+        "desi-rv-variables": "0.3.0",
+        "httpio": "0.3.0",
+        "numpy": "2.4.6",
+        "pandas": "2.3.3",
+        "pyarrow": "24.0.0",
+        "scipy": "1.18.0"
+      },
+      "platform": "macOS-26.5.1-arm64-arm-64bit",
+      "python": "3.12.4"
+    }
+  },
+  "source_level_outputs_published": false,
+  "spectral_input_digests": {
+    "cframe_set_sha256": "27743c90a08a9a0efdf6607dae0976761ff459fbd1c04a4e73ad2c43ef5fc62c",
+    "rvspec_model_subset_sha256": "37b09221f16520020e8d49ddca2a38e259239517d1406df292dce88af65a67e5"
+  },
+  "spectral_validation": {
+    "epochs": 19,
+    "flux_level_consistent_sources": 4,
+    "sources": 4,
+    "validated_cframes": 57
+  },
+  "spectral_validation_settings": {
+    "confirmation_max_median_abs_residual_kms": 10.0,
+    "confirmation_min_correlation": 0.8,
+    "confirmation_min_spectral_range_kms": 20.0,
+    "continuum_polynomial_degree": 3,
+    "max_download_workers": 8,
+    "min_source_epochs": 4,
+    "min_valid_pixels_per_arm": 250,
+    "velocity_max_kms": 250.0,
+    "velocity_min_kms": -250.0,
+    "velocity_step_kms": 1.0
+  },
+  "status": "exploratory; no object-level discovery claim"
+}

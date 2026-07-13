@@ -59,6 +59,48 @@ is an observed classification change, not a calibration-contamination estimate.
 The automated 1,140-source robust diagnostic subset is only triage for future
 spectrum review and external crossmatches; it is not a variable-star catalogue.
 
+## Exploratory Follow-up Experiments
+
+Three additional questions were threshold-frozen before their ranked source
+identifiers were inspected. The aggregate results are published in
+[`reports/exploratory_experiments_summary.md`](reports/exploratory_experiments_summary.md),
+with the exact protocol in
+[`research/exploratory_experiments_protocol.md`](research/exploratory_experiments_protocol.md).
+
+- A repeated high-amplitude rule requiring two disjoint same-program,
+  inter-night pairs detects 197 of 953 eligible robust screening sources.
+- A strict same-program secular-acceleration search detects 0 of 56 eligible
+  sequences; the null result is retained without relaxing its gates.
+- Six high-amplitude detections pass a consistent metal-poor screen. Two match
+  known variable-star classifications. Four lack a match under the declared
+  Gaia DR3, SpecDis-flag, exact-ID SIMBAD, and 2-arcsec VSX rules.
+- A post-selection check against all three public DESI cframe arms recovers the
+  relative line shifts for all four externally unmatched targets. Their
+  catalogue-versus-flux RV correlations are 0.9982 to 0.9998, with per-source
+  median absolute residuals of 0.30 to 6.40 km/s.
+
+The last four objects are private follow-up targets, not claimed discoveries.
+The flux check uses a common RVSpecFit model shape while fitting shifts directly
+to the cframe fluxes; independent spectroscopy and expert review remain
+required.
+
+After building the base bundles, the follow-up workflow is:
+
+```bash
+python -m pip install -e ".[dev,spectra]"
+python -m desi_rv_variables.cli run-experiments
+python -m desi_rv_variables.cli crossmatch-experiments \
+  --specdis data/external/specdis/iron-yr1-v2.1.fits
+python -m desi_rv_variables.cli validate-spectra
+python -m desi_rv_variables.cli publish-experiments
+```
+
+The frozen SpecDis v2.1 file is available from the official DESI DR1 VAC and
+must have SHA-256
+`25075043f066c27af6ac25edd381cdff20930ed87f9d337b2d9c2df1403ddf1b`.
+Source-level experiment outputs and the downloaded cframes remain ignored by
+git; only aggregate tables and sanitized provenance are tracked.
+
 ## Data Boundary
 
 Raw DESI FITS files and derived Parquet bundles are intentionally ignored by
@@ -71,7 +113,7 @@ build manifest. For a clean checkout, clone both matching releases:
 
 ```bash
 git clone --branch v0.3.0 https://github.com/Xopoko/desi-rv-audit.git
-git clone --branch v0.2.0 https://github.com/Xopoko/desi-rv-variables.git
+git clone --branch v0.3.0 https://github.com/Xopoko/desi-rv-variables.git
 ```
 
 Expected local inputs can be provided via environment variables:

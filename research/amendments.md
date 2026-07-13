@@ -50,3 +50,18 @@ formal preregistration.
 - Add Gaussian and heavy-tailed Keplerian injection-recovery sensitivity runs.
 - Reserve `ROBUST_DIAGNOSTIC_SUBSET` for deterministic triage; no gold sample,
   calibrated FDR, or novelty claim is introduced.
+
+## Exploratory follow-up, 2026-07-13
+
+- Freeze three follow-up questions and thresholds in
+  `research/exploratory_experiments_protocol.md` before inspecting their ranked
+  source identifiers.
+- After the metal-poor external screen, add a post-selection flux-level check
+  against the public DR1 `B`, `R`, and `Z` cframe spectra. This is validation,
+  not a fourth discovery experiment. Before running the three-arm check, define
+  consistency as at least four epochs, catalogue-versus-spectral relative-RV
+  correlation at least 0.8, median absolute residual at most 10 km/s, and a
+  spectral RV range of at least 20 km/s.
+- Add a post-selection context comparison of declared Gaia DR3 or SpecDis
+  matches among all high-amplitude-eligible sources. This comparison does not
+  alter eligibility or detection thresholds.
