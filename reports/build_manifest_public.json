@@ -1,16 +1,9 @@
 {
   "before_rule_reconciliation_fraction": 0.0,
-  "candidate_shuffle_transition_null_summary": {
-    "max_outlier_to_below_screening_threshold": 913,
-    "median_outlier_to_below_screening_threshold": 711.0,
-    "min_outlier_to_below_screening_threshold": 578,
-    "n_ge_real_outlier_to_below_screening_threshold": 0,
-    "n_shuffles": 20
-  },
   "coverage_attrition_fraction": 0.005024297833786343,
   "fold_fixture": [
     {
-      "fold": 1,
+      "fold": 4,
       "group_id": 1
     },
     {
@@ -18,20 +11,79 @@
       "group_id": 101
     },
     {
-      "fold": 3,
+      "fold": 1,
       "group_id": 202
     },
     {
-      "fold": 0,
+      "fold": 4,
       "group_id": 303
     },
     {
-      "fold": 0,
+      "fold": 2,
       "group_id": 123456789012345678
     },
     {
       "fold": 4,
       "group_id": -55
+    }
+  ],
+  "full_pipeline_permutation_null_summary": {
+    "corrected_empirical_exceedance_probability": 0.10891089108910891,
+    "max_outlier_to_below_screening_threshold": 1976,
+    "median_outlier_to_below_screening_threshold": 1091.0,
+    "median_unscorable": 45.5,
+    "min_exposure_map_coverage_fraction": 1.0,
+    "min_outlier_to_below_screening_threshold": 405,
+    "n_ge_real_outlier_to_below_screening_threshold": 10,
+    "n_permutations": 100
+  },
+  "heuristic_offset_shuffle_null_summary": {
+    "max_outlier_to_below_screening_threshold": null,
+    "median_outlier_to_below_screening_threshold": null,
+    "min_outlier_to_below_screening_threshold": null,
+    "n_ge_real_outlier_to_below_screening_threshold": null,
+    "n_shuffles": 0
+  },
+  "injection_recovery_summary": [
+    {
+      "AMPLITUDE_KMS": 0.0,
+      "DETECTION_FRACTION": 0.0,
+      "ECCENTRICITY": 0.0,
+      "NOISE_MODEL": "GAUSSIAN_PLUS_BOOTSTRAP_OFFSET",
+      "N_DETECTED": 0,
+      "N_TRIALS": 1000,
+      "PERIOD_DAYS": null,
+      "SIGNAL_MODEL": "NULL"
+    },
+    {
+      "AMPLITUDE_KMS": 20.0,
+      "DETECTION_FRACTION": 0.776,
+      "ECCENTRICITY": 0.0,
+      "NOISE_MODEL": "GAUSSIAN_PLUS_BOOTSTRAP_OFFSET",
+      "N_DETECTED": 776,
+      "N_TRIALS": 1000,
+      "PERIOD_DAYS": 10.0,
+      "SIGNAL_MODEL": "KEPLERIAN"
+    },
+    {
+      "AMPLITUDE_KMS": 0.0,
+      "DETECTION_FRACTION": 0.002,
+      "ECCENTRICITY": 0.0,
+      "NOISE_MODEL": "STUDENT_T_DF_5_PLUS_BOOTSTRAP_OFFSET",
+      "N_DETECTED": 2,
+      "N_TRIALS": 1000,
+      "PERIOD_DAYS": null,
+      "SIGNAL_MODEL": "NULL"
+    },
+    {
+      "AMPLITUDE_KMS": 20.0,
+      "DETECTION_FRACTION": 0.765,
+      "ECCENTRICITY": 0.0,
+      "NOISE_MODEL": "STUDENT_T_DF_5_PLUS_BOOTSTRAP_OFFSET",
+      "N_DETECTED": 765,
+      "N_TRIALS": 1000,
+      "PERIOD_DAYS": 10.0,
+      "SIGNAL_MODEL": "KEPLERIAN"
     }
   ],
   "input_files": {
@@ -57,10 +109,25 @@
         "size": 2873151360
       }
     ],
+    "program_night_bootstrap_offsets": {
+      "name": "program_night_bootstrap_offsets.csv",
+      "sha256": "744bdd5433d93695949678346dfe596456edfb4493befbcd60d095fe3045aa47",
+      "size": 8471316
+    },
     "program_night_offsets": {
       "name": "diagnostic_offsets_program_night.csv",
-      "sha256": "d3d1de75f2140cc77cd64bccaf944e4e76b4b2971d82a2f32e66ee2c024e9a30",
-      "size": 100411
+      "sha256": "8c8e4c5bb787c7534c2c4a2a2b0b1c2b77810475e25b6ec2f533889d23eb0926",
+      "size": 100396
+    },
+    "program_night_permutation_exposure_map": {
+      "name": "program_night_permutation_exposure_map.csv",
+      "sha256": "dc99e2457e0aa73db167aaa07c57a0862c5748b1ba1417b4554af975c7a52d08",
+      "size": 45888878
+    },
+    "program_night_permutation_offsets": {
+      "name": "program_night_permutation_offsets.csv",
+      "sha256": "910aed945056010bac4b424697fe8dc9b1fff195108736bdad852442d6c1fb44",
+      "size": 21818917
     },
     "strict_candidates": {
       "name": "candidate_sources_strict.csv",
@@ -68,14 +135,16 @@
       "size": 3272702
     }
   },
-  "n_bundle_sources": 24273,
+  "n_bootstrap_robust_95": 10457,
+  "n_bundle_sources": 24269,
   "n_cadence_matched_inspection_control_sources": 12100,
-  "n_candidate_epoch_bundle_rows": 89180,
-  "n_control_sources_in_both_inspection_and_injection": 12070,
+  "n_candidate_epoch_bundle_rows": 89199,
+  "n_control_sources_in_both_inspection_and_injection": 12074,
   "n_injection_recovery_base_population_sources": 12102,
-  "n_new_oof_outliers_not_in_strict_screening": 509,
-  "n_oof_outliers": 11049,
-  "n_primary_non_strict_sources": 304664,
+  "n_new_oof_outliers_not_in_strict_screening": 507,
+  "n_oof_outliers": 11047,
+  "n_primary_non_strict_sources": 304633,
+  "n_robust_diagnostic_subset": 1140,
   "n_sources_oof_summary": 318834,
   "n_strict_screening_candidates_before_outlier_primary": 12080,
   "n_strict_screening_candidates_in_summary": 12141,
@@ -83,45 +152,70 @@
   "n_strict_screening_candidates_oof_outlier_primary": 10540,
   "n_strict_screening_candidates_primary_complete_case": 12080,
   "n_strict_screening_candidates_reclassified_primary": 1540,
-  "new_oof_outlier_fraction": 0.0016706929601134363,
+  "new_oof_outlier_fraction": 0.0016642976959160695,
   "offset_table": {
     "component_counts": {
-      "0": 10,
-      "1": 2572
+      "0": 2571,
+      "1": 10
     },
-    "n_rows": 2582
+    "n_rows": 2581
   },
   "oof_reclassification_fraction": 0.12748344370860928,
   "oof_scoring_status_counts": {
-    "COMPLETE_SINGLE_COMPONENT": 316744,
-    "INSUFFICIENT_OOF_EPOCHS": 1633,
-    "PARTIAL_COVERAGE": 457
+    "COMPLETE_SINGLE_COMPONENT": 316713,
+    "INSUFFICIENT_OOF_EPOCHS": 1661,
+    "PARTIAL_COVERAGE": 460
   },
   "output_files": {
+    "candidate_bootstrap_stability": {
+      "name": "candidate_bootstrap_stability.parquet",
+      "sha256": "88e14c3a0c955df5f1766468ee51eeced08ba995d3559a4e976016fee9590123",
+      "size": 368546
+    },
     "candidate_epoch_bundle": {
       "name": "candidate_epoch_bundle.parquet",
-      "sha256": "09b11cda0c9b61f193f463170197f469a46f5c16761493ddd0fe12bbc66d2de5",
-      "size": 23418775
+      "sha256": "c74d21c6070d61874b049b18b6e58f34d564f049fb1001185f69fe340a70bc96",
+      "size": 23403851
     },
-    "candidate_shuffle_transition_null": {
-      "name": "candidate_shuffle_transition_null.csv",
-      "sha256": "1153a59234e4526f4da9f15497253ee9ec24eb13eff9e24608c2e939ba3aff4c",
-      "size": 962
+    "candidate_robustness": {
+      "name": "candidate_robustness.parquet",
+      "sha256": "6172a42c488c7ee087eba3c82c71bd7b6144a2740798db39de64d8e48c844473",
+      "size": 389877
+    },
+    "full_pipeline_permutation_null": {
+      "name": "full_pipeline_permutation_null.csv",
+      "sha256": "4a377ebe3f8b5ba507d33409786c6d2806150c208a5ced19d4959f52c60c7515",
+      "size": 5052
+    },
+    "heuristic_offset_shuffle_null": {
+      "name": "heuristic_offset_shuffle_null.csv",
+      "sha256": "f7b194c165da8a8269270f439de3f617161e457d4b3dad4068140502e8bafac3",
+      "size": 165
+    },
+    "injection_recovery": {
+      "name": "injection_recovery.csv",
+      "sha256": "a8a7ddce51889314103ed8ab360f043bb7f09ef83c7965fb6702683d75f1812b",
+      "size": 274603
     },
     "metric_shift_summary": {
       "name": "metric_shift_summary.csv",
-      "sha256": "f597ac21db63ea0e5c366deeea85bd8b457d6752b23231708bbfb905f65213ef",
-      "size": 1013
+      "sha256": "1c3b17f29af0fef0ab148063c10ff32afe2022a3b19367c0edef266d944a84de",
+      "size": 1005
     },
     "primary_cohort_transition_table": {
       "name": "primary_cohort_transition_table.csv",
-      "sha256": "808b7a5bbbf85db4d2e0bdee8c485851b720a84bbbdd39ffa79847f8fa2e71f3",
+      "sha256": "c944272fe28e6d3e112302c9bef625b6a6e5031e70f347cfcaa131a0c262d9ce",
       "size": 233
+    },
+    "program_night_offset_uncertainty": {
+      "name": "program_night_offset_uncertainty.csv",
+      "sha256": "43baf85681a1f19b680e980aaabed146b607c82b2dc5a0af107e0a24b57bfd71",
+      "size": 106330
     },
     "source_summary_oof": {
       "name": "source_summary_oof.parquet",
-      "sha256": "5c6181f988a202728305909300cda5ffcce9160d5a445eea40ef14e5e87e0743",
-      "size": 55528346
+      "sha256": "d34ae63b08c9082c240acffe0ffcb92a2607289236afe69ec6970449a657c42f",
+      "size": 56109090
     },
     "strict_candidate_transition_table": {
       "name": "strict_candidate_transition_table.csv",
@@ -130,7 +224,7 @@
     },
     "threshold_sensitivity": {
       "name": "threshold_sensitivity.csv",
-      "sha256": "d48d53590482064799f5da3a900b26f209fad84ab267f497744cb1e517016838",
+      "sha256": "06c25518a2deb8e7c7acbee606537c78bc4db36b5bd8a6800c089a370415d9d5",
       "size": 1133
     }
   },
@@ -140,26 +234,29 @@
     "check_frozen_input_hashes": true,
     "check_offsets_git_commit": true,
     "control_ratio": 1.0,
+    "fold_hash_algorithm": "blake2b-64-v1",
     "injection_base_ratio": 1.0,
+    "injection_seed": 20260713,
+    "injection_trials_per_cell": 1000,
     "min_sn_r": 5.0,
-    "n_candidate_shuffles": 20,
+    "n_candidate_shuffles": 0,
     "n_folds": 5,
     "strict_candidates_sha256": "5c96d5cc823725f9c80f133c11f0aad3ca09c7eaa678a5d694b095eb46944b47"
   },
   "primary_cohort_transition_table": [
     {
       "BEFORE_CLASS": "BELOW_SCREENING_THRESHOLD",
-      "N": 290916,
+      "N": 290883,
       "OOF_CLASS": "BELOW_SCREENING_THRESHOLD"
     },
     {
       "BEFORE_CLASS": "BELOW_SCREENING_THRESHOLD",
-      "N": 509,
+      "N": 507,
       "OOF_CLASS": "OUTLIER"
     },
     {
       "BEFORE_CLASS": "INSUFFICIENT_BASELINE",
-      "N": 13239,
+      "N": 13243,
       "OOF_CLASS": "INSUFFICIENT_BASELINE"
     },
     {
@@ -174,16 +271,16 @@
     }
   ],
   "repositories": {
-    "desi_rv_audit_artifact_commit": "6b3c116cd77cc0254c9f26fd0e98fdebdaa4807b",
+    "desi_rv_audit_artifact_commit": "fcc7e2e3e83df4ff851050d81bd3d9b2e715312b",
     "desi_rv_audit_artifact_dirty": false,
-    "desi_rv_variables_commit": "856e95104537ef646f9c2588c2158ac247c5acbd",
+    "desi_rv_variables_commit": "731a0e364294bb3af1c4b5bfc33ecf51e75e6852",
     "desi_rv_variables_dirty": false
   },
   "runtime": {
     "packages": {
       "astropy": "8.0.0",
-      "desi-rv-audit": "0.2.1",
-      "desi-rv-variables": "0.1.3",
+      "desi-rv-audit": "0.3.0",
+      "desi-rv-variables": "0.2.0",
       "numpy": "2.4.6",
       "pandas": "2.3.3",
       "pyarrow": "24.0.0",

@@ -41,6 +41,24 @@ Candidate labels generated here are screening labels, not confirmed variable
 stars. Object-level interpretation requires spectrum/model inspection and
 external catalogue checks.
 
+## Aggregate Result
+
+In the complete single-component OOF cohort, 1,540 of 12,080 frozen strict
+screening sources (12.75%) move below the first-pass threshold after the real
+diagnostic correction; 10,540 remain above it.
+
+The required candidate-level null changes the interpretation. Across 100
+exposure-level shuffled-night assignments, each with all five fold models
+refitted, the transition count ranges from 405 to 1,976 with median 1,091.
+Ten permutations equal or exceed the real count, giving the corrected empirical
+estimate `(10 + 1) / (100 + 1) = 0.109`.
+
+Therefore this analysis does **not** show that the real `PROGRAM:NIGHT`
+structure causes an excess number of candidate reclassifications. The 12.75%
+is an observed classification change, not a calibration-contamination estimate.
+The automated 1,140-source robust diagnostic subset is only triage for future
+spectrum review and external crossmatches; it is not a variable-star catalogue.
+
 ## Data Boundary
 
 Raw DESI FITS files and derived Parquet bundles are intentionally ignored by

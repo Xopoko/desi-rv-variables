@@ -92,6 +92,10 @@ Each permutation assigns one shuffled night to each physical exposure within a
 program, refits all source-disjoint fold models, and then repeats candidate-level
 scoring. This is the primary candidate-level negative control.
 
+The real transition count is not extreme under this control. It therefore does
+not support an excess candidate-reclassification claim attributable to the real
+night structure; the observed 12.75% remains descriptive only.
+
 ## Offset And Source Robustness
 
 - Sources retaining the outlier classification in at least 95% of scorable
